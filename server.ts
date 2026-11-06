@@ -1,4 +1,6 @@
 import express from 'express';
+import os from 'os';
+import { durableRequests } from './src/server/durableRequests.ts';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -7,7 +9,17 @@ import { ServerAuthStore, sanitizeUserForClient } from './src/server/authService
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const DATA_DIR = path.join(__dirname, 'data');
+const SEED_DATA_DIR = path.join(__dirname, 'data');
+const DATA_DIR = process.env.SCHOOL_DATA_DIR || (process.env.VERCEL ? path.join(os.tmpdir(), 'dongthanh-data') : SEED_DATA_DIR);
+if (process.env.VERCEL) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  for (const name of ['auth_accounts.json', 'school_state.json']) {
+    const target = path.join(DATA_DIR, name);
+    if (!fs.existsSync(target) && fs.existsSync(path.join(SEED_DATA_DIR, name))) {
+      fs.copyFileSync(path.join(SEED_DATA_DIR, name), target);
+    }
+  }
+}
 const authStore = new ServerAuthStore(DATA_DIR);
 const STATE_FILE = path.join(DATA_DIR, 'school_state.json');
 const FIREBASE_CONFIG_FILE = path.join(__dirname, 'firebase-applet-config.json');
@@ -832,7 +844,7 @@ async function pullStateFromCloudFirestore(force = false): Promise<boolean> {
   }
 }
 
-async function startServer() {
+export async function createApp(apiOnly = false) {
   const app = express();
 
   // Determine port: strictly prioritize process.env.PORT (e.g. Cloud Run PORT=3000 / PORT=8080), with CLI arg fallback, defaulting to 3000
@@ -843,8 +855,13 @@ async function startServer() {
 
   app.use(express.json({ limit: '50mb' }));
 
-  // Initial sync with Cloud Firestore on startup so cold-started containers immediately have the school's state
-  pullStateFromCloudFirestore(true).catch(() => {});
+  if (!apiOnly) pullStateFromCloudFirestore(true).catch(() => {});
+  if (apiOnly) {
+    app.use(durableRequests(
+      () => ({ auth: authStore.exportSnapshot(), state: cachedState }),
+      (snapshot) => { authStore.importSnapshot(snapshot.auth); cachedState = snapshot.state; }
+    ));
+  }
 
   // Helper to resolve base URL for setup/reset password links
   const getRequestBaseUrl = (req: express.Request): string => {
@@ -858,14 +875,14 @@ async function startServer() {
   const setSessionCookie = (res: express.Response, token: string) => {
     res.setHeader(
       'Set-Cookie',
-      `thcs_dt_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400`
+      `thcs_dt_session=${encodeURIComponent(token)}; Path=/; HttpOnly; ${process.env.NODE_ENV === 'production' ? 'Secure; ' : ''}SameSite=Lax; Max-Age=86400`
     );
   };
 
   const clearSessionCookie = (res: express.Response) => {
     res.setHeader(
       'Set-Cookie',
-      'thcs_dt_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0'
+      `thcs_dt_session=; Path=/; HttpOnly; ${process.env.NODE_ENV === 'production' ? 'Secure; ' : ''}SameSite=Lax; Max-Age=0`
     );
   };
 
@@ -909,47 +926,7 @@ async function startServer() {
   // 2. Login via Google OAuth (verifies against member accounts on server)
   app.post('/api/auth/google', async (req, res) => {
     try {
-      const { email, fullName } = req.body || {};
-      const cleanEmail = String(email || '').trim().toLowerCase();
-      if (!cleanEmail) {
-        res.status(400).json({ ok: false, error: 'Không nhận được địa chỉ Email từ Google.' });
-        return;
-      }
-
-      const account = authStore.findAccountByIdentifier(cleanEmail);
-      if (!account) {
-        res.status(403).json({
-          ok: false,
-          error: 'Email Google này chưa được cấp tài khoản trong hệ thống. Vui lòng liên hệ Quản trị viên để được tạo tài khoản.',
-        });
-        return;
-      }
-
-      if (account.status === 'inactive') {
-        res.status(403).json({
-          ok: false,
-          error: 'Tài khoản của bạn đang bị khóa bởi Quản trị viên.',
-        });
-        return;
-      }
-
-      if (fullName && (!account.fullName || account.fullName === 'Quản trị')) {
-        account.fullName = String(fullName).trim();
-      }
-      account.lastLoginAt = new Date().toISOString();
-      account.failedLoginAttempts = 0;
-      account.lockedUntil = null;
-      authStore.saveAccounts();
-
-      const sessionToken = authStore.createSession(account.id, req);
-      setSessionCookie(res, sessionToken);
-
-      res.json({
-        ok: true,
-        token: sessionToken,
-        user: sanitizeUserForClient(account),
-        mustChangePassword: Boolean(account.mustChangePassword),
-      });
+      res.status(503).json({ ok: false, error: 'Đăng nhập Google chưa được cấu hình xác minh trên máy chủ. Vui lòng dùng tên đăng nhập và mật khẩu.' });
     } catch (err) {
       console.error('Error in POST /api/auth/google:', err);
       res.status(500).json({ ok: false, error: 'Lỗi xác thực tài khoản Google.' });
@@ -1367,6 +1344,15 @@ async function startServer() {
     }
   });
 
+  // School records require a valid server session on every read and write.
+  app.use(['/api/school-state', '/api/staff-members', '/api/clinic-visit'], (req, res, next) => {
+    if (!authStore.getAuthenticatedAccount(req)) {
+      res.status(401).json({ ok: false, error: 'Vui lòng đăng nhập để truy cập dữ liệu.' });
+      return;
+    }
+    next();
+  });
+
   // Lightweight health & revision check for multi-computer real-time sync
   app.get('/api/health', async (_req, res) => {
     if (!cachedState) {
@@ -1665,6 +1651,8 @@ async function startServer() {
     res.status(404).json({ ok: false, error: 'Endpoint API không tồn tại.' });
   });
 
+  if (apiOnly) return app;
+
   const distPath = path.join(__dirname, 'dist');
   const isProd = process.env.NODE_ENV === 'production';
 
@@ -1689,6 +1677,12 @@ async function startServer() {
     app.use(vite.middlewares);
   }
 
+  return app;
+}
+
+async function startServer() {
+  const app = await createApp();
+  const PORT = Number(process.env.PORT) || 3000;
   const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`School Health Server running on http://0.0.0.0:${PORT}`);
   });
@@ -1698,4 +1692,6 @@ async function startServer() {
   });
 }
 
-startServer();
+if (!process.env.VERCEL && process.argv[1] && path.resolve(process.argv[1]) === __filename) {
+  startServer().catch((error) => { console.error(error); process.exitCode = 1; });
+}
