@@ -22,8 +22,10 @@ import {
   Check,
   Building,
   UserCheck,
+  FileSignature,
+  PenTool,
 } from 'lucide-react';
-import { db } from '../services/db';
+import { db, getDaysRemaining } from '../services/db';
 import {
   MedicineDisposal,
   MedicineDisposalItem,
@@ -85,17 +87,39 @@ const getNearExpiryBatchesList = (days = 60): ExpiredBatchItem[] => {
   }));
 };
 
+const getAllBatchesWithStockList = (): ExpiredBatchItem[] => {
+  const meds = db.getMedicines();
+  const batches = db.getBatches().filter((b) => b.quantity > 0);
+  return batches.map((batch) => {
+    const med = meds.find((m) => m.id === batch.medicineId);
+    return {
+      batchId: batch.id,
+      medicineId: batch.medicineId,
+      medicineCode: med?.code || '',
+      medicineName: med?.name || 'Không xác định',
+      activeIngredient: med?.activeIngredient || '',
+      unit: med?.unit || 'Đơn vị',
+      batchNumber: batch.batchNumber,
+      expDate: batch.expDate,
+      quantity: batch.quantity,
+      unitPrice: batch.unitPrice || med?.unitPrice || 0,
+      daysRemaining: getDaysRemaining(batch.expDate),
+    };
+  });
+};
+
 export const StockDisposalModal: React.FC<StockDisposalModalProps> = ({ onClose, onSuccess }) => {
   const [activeTab, setActiveTab] = useState<'check_expiry' | 'create_disposal' | 'history'>('check_expiry');
 
   // Batches & Expired State
   const [expiredBatches, setExpiredBatches] = useState<ExpiredBatchItem[]>(() => getExpiredBatchesList());
   const [expiringSoonBatches, setExpiringSoonBatches] = useState<ExpiredBatchItem[]>(() => getNearExpiryBatchesList(60));
+  const [allStockBatches, setAllStockBatches] = useState<ExpiredBatchItem[]>(() => getAllBatchesWithStockList());
   const [disposals, setDisposals] = useState<MedicineDisposal[]>(() => db.getDisposals());
   const [settings, setSettings] = useState(() => db.getSettings());
 
   // Filter in Tab 1
-  const [expiryFilter, setExpiryFilter] = useState<'all' | 'expired_only' | 'expiring_30' | 'expiring_60'>('expired_only');
+  const [expiryFilter, setExpiryFilter] = useState<'all' | 'expired_only' | 'expiring_30' | 'expiring_60' | 'all_stock'>('expired_only');
   const [searchTerm, setSearchTerm] = useState('');
 
   // Selected items for disposal: batchId -> { selected: boolean, quantity: number, reason: string }
@@ -113,13 +137,51 @@ export const StockDisposalModal: React.FC<StockDisposalModalProps> = ({ onClose,
   const [disposalMethod, setDisposalMethod] = useState<string>(
     'Hòa tan, trung hòa bất hoạt và chuyển bao gói rác thải y tế chuyên trách tiêu hủy theo quy định'
   );
-  const [witnessNotes, setWitnessNotes] = useState<string>('Hội đồng đã kiểm tra đúng chủng loại, số lượng, niêm phong và tiêu hủy an toàn theo quy định.');
-  const [councilMembers, setCouncilMembers] = useState<DisposalCouncilMember[]>([
-    { roleTitle: 'Chủ tịch hội đồng', name: 'Quản trị', position: 'Đại diện Quản trị / Ban Giám hiệu' },
-    { roleTitle: 'Thư ký hội đồng', name: 'Nhân viên Y tế', position: 'Phụ trách Phòng Y tế học đường' },
-    { roleTitle: 'Ủy viên', name: 'Bộ phận Kế toán', position: 'Kế toán / Thủ kho' },
-    { roleTitle: 'Ủy viên giám sát', name: 'Ban Giám sát', position: 'Đại diện Thanh tra / Công đoàn' },
-  ]);
+  const [witnessNotes, setWitnessNotes] = useState<string>(
+    'Hội đồng đã kiểm tra đúng chủng loại, số lượng, niêm phong và tiêu hủy an toàn theo quy định. | Biên bản thực tế: Tiêu hủy và xuất trừ kho tự động.'
+  );
+  const [bghMember, setBghMember] = useState<DisposalCouncilMember>({
+    roleTitle: 'P. HIỆU TRƯỞNG',
+    name: 'Trần Thị Thanh Hiền',
+    position: 'Phó Hiệu trưởng',
+    signNote: '',
+    signatureContent: '',
+  });
+  const [medicMember, setMedicMember] = useState<DisposalCouncilMember>(() => {
+    const user = db.getCurrentUser();
+    return {
+      roleTitle: 'NHÂN VIÊN Y TẾ',
+      name: user?.fullName?.replace(/^Cô\s+|^Thầy\s+/, '') || 'Đoàn Thị Minh Trang',
+      position: 'Phụ trách Phòng Y tế học đường',
+      signNote: '',
+      signatureContent: '',
+    };
+  });
+  const [accountantMember, setAccountantMember] = useState<DisposalCouncilMember>({
+    roleTitle: 'KẾ TOÁN TRƯỜNG',
+    name: 'Lê Thị Kim Cúc',
+    position: 'Kế toán trường',
+    signNote: '',
+    signatureContent: '',
+  });
+  const [includeAccountant, setIncludeAccountant] = useState<boolean>(false);
+  const [extraSigners, setExtraSigners] = useState<DisposalCouncilMember[]>([]);
+
+  const councilMembers = useMemo<DisposalCouncilMember[]>(() => {
+    const list: DisposalCouncilMember[] = [
+      { ...bghMember },
+      { ...medicMember },
+    ];
+    if (includeAccountant && accountantMember.name && accountantMember.name.trim()) {
+      list.push({ ...accountantMember });
+    }
+    for (const extra of extraSigners) {
+      if (extra.name && extra.name.trim()) {
+        list.push({ ...extra });
+      }
+    }
+    return list;
+  }, [bghMember, medicMember, accountantMember, includeAccountant, extraSigners]);
   const [formItems, setFormItems] = useState<MedicineDisposalItem[]>([]);
 
   // Feedback notifications
@@ -134,6 +196,7 @@ export const StockDisposalModal: React.FC<StockDisposalModalProps> = ({ onClose,
   const refreshData = () => {
     setExpiredBatches(getExpiredBatchesList());
     setExpiringSoonBatches(getNearExpiryBatchesList(60));
+    setAllStockBatches(getAllBatchesWithStockList());
     setDisposals(db.getDisposals());
     setSettings(db.getSettings());
   };
@@ -161,7 +224,9 @@ export const StockDisposalModal: React.FC<StockDisposalModalProps> = ({ onClose,
   // Combined list for Tab 1
   const displayedBatches = useMemo(() => {
     let list = [...expiredBatches];
-    if (expiryFilter === 'all') {
+    if (expiryFilter === 'all_stock') {
+      list = [...allStockBatches];
+    } else if (expiryFilter === 'all') {
       // Add expiring batches not already in list
       const set = new Set(list.map((i) => i.batchId));
       for (const b of expiringSoonBatches) {
@@ -185,14 +250,14 @@ export const StockDisposalModal: React.FC<StockDisposalModalProps> = ({ onClose,
     }
 
     return list.sort((a, b) => a.daysRemaining - b.daysRemaining);
-  }, [expiredBatches, expiringSoonBatches, expiryFilter, searchTerm]);
+  }, [expiredBatches, expiringSoonBatches, allStockBatches, expiryFilter, searchTerm]);
 
   // Total selected summary
   const selectedSummary = useMemo(() => {
     let count = 0;
     let totalQty = 0;
     let totalVal = 0;
-    const all = [...expiredBatches, ...expiringSoonBatches];
+    const all = allStockBatches;
     const entries = Object.entries(selectedBatches) as [string, { selected: boolean; quantity: number; reason: string }][];
     for (const [batchId, conf] of entries) {
       if (conf.selected && conf.quantity > 0) {
@@ -205,18 +270,19 @@ export const StockDisposalModal: React.FC<StockDisposalModalProps> = ({ onClose,
       }
     }
     return { count, totalQty, totalVal };
-  }, [selectedBatches, expiredBatches, expiringSoonBatches]);
+  }, [selectedBatches, allStockBatches]);
 
   // Move selected to Tab 2
   const handleProceedToDisposalForm = () => {
-    const all = [...expiredBatches, ...expiringSoonBatches];
+    const all = allStockBatches;
     const items: MedicineDisposalItem[] = [];
     const entries = Object.entries(selectedBatches) as [string, { selected: boolean; quantity: number; reason: string }][];
 
     for (const [batchId, conf] of entries) {
       if (conf.selected && conf.quantity > 0) {
         const b = all.find((x) => x.batchId === batchId);
-        if (b) {
+        if (b && b.quantity > 0) {
+          const qtyToDispose = Math.min(conf.quantity, b.quantity);
           items.push({
             medicineId: b.medicineId,
             medicineCode: b.medicineCode,
@@ -227,10 +293,10 @@ export const StockDisposalModal: React.FC<StockDisposalModalProps> = ({ onClose,
             batchNumber: b.batchNumber,
             expDate: b.expDate,
             currentStock: b.quantity,
-            disposalQuantity: conf.quantity,
+            disposalQuantity: qtyToDispose,
             unitPrice: b.unitPrice,
-            totalAmount: conf.quantity * b.unitPrice,
-            reason: conf.reason || 'Hết hạn sử dụng',
+            totalAmount: qtyToDispose * b.unitPrice,
+            reason: conf.reason || (b.daysRemaining < 0 ? 'Hết hạn sử dụng' : 'Hỏng, biến chất, nứt vỡ'),
           });
         }
       }
@@ -328,7 +394,60 @@ export const StockDisposalModal: React.FC<StockDisposalModalProps> = ({ onClose,
     setDisposalLocation(d.disposalLocation);
     setDisposalMethod(d.disposalMethod);
     setWitnessNotes(d.witnessNotes || '');
-    setCouncilMembers(d.councilMembers);
+
+    const members = d.councilMembers || [];
+    const bgh = members.find((m) => m.roleTitle?.toLowerCase().includes('chủ tịch') || m.position?.toLowerCase().includes('giám hiệu')) ||
+      members[0] || {
+        roleTitle: 'Chủ tịch hội đồng',
+        name: 'Ban Giám hiệu',
+        position: 'Đại diện Ban Giám hiệu',
+        signNote: '(Ký, đóng dấu duyệt)',
+        signatureContent: '',
+      };
+    const medic = members.find((m) => m.roleTitle?.toLowerCase().includes('thư ký') || m.roleTitle?.toLowerCase().includes('y tế') || m.position?.toLowerCase().includes('y tế')) ||
+      (members.length > 1 ? members[1] : null) || {
+        roleTitle: 'Thư ký hội đồng',
+        name: db.getCurrentUser()?.fullName || 'Nhân viên Y tế',
+        position: 'Phụ trách Phòng Y tế học đường',
+        signNote: '(Ký và ghi rõ họ tên)',
+        signatureContent: '',
+      };
+    const acc = members.find(
+      (m) =>
+        m.roleTitle?.toLowerCase().includes('kế toán') ||
+        m.position?.toLowerCase().includes('kế toán')
+    );
+
+    setBghMember({
+      roleTitle: bgh.roleTitle || 'Chủ tịch hội đồng',
+      name: bgh.name || 'Ban Giám hiệu',
+      position: bgh.position || 'Đại diện Ban Giám hiệu',
+      signNote: bgh.signNote || '(Ký, đóng dấu duyệt)',
+      signatureContent: bgh.signatureContent || '',
+    });
+    setMedicMember({
+      roleTitle: medic.roleTitle || 'Thư ký hội đồng',
+      name: medic.name || db.getCurrentUser()?.fullName || 'Nhân viên Y tế',
+      position: medic.position || 'Phụ trách Phòng Y tế học đường',
+      signNote: medic.signNote || '(Ký và ghi rõ họ tên)',
+      signatureContent: medic.signatureContent || '',
+    });
+    if (acc && acc.name && acc.name.trim()) {
+      setAccountantMember({
+        roleTitle: acc.roleTitle || 'Kế toán trường',
+        name: acc.name,
+        position: acc.position || 'Kế toán trường',
+        signNote: acc.signNote || '(Ký và ghi rõ họ tên)',
+        signatureContent: acc.signatureContent || '',
+      });
+      setIncludeAccountant(true);
+    } else {
+      setIncludeAccountant(false);
+    }
+
+    const extras = members.filter((m) => m !== bgh && m !== medic && m !== acc);
+    setExtraSigners(extras);
+
     setFormItems(d.items);
     setActiveTab('create_disposal');
   };
@@ -503,7 +622,18 @@ export const StockDisposalModal: React.FC<StockDisposalModalProps> = ({ onClose,
                         : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                     }`}
                   >
-                    Tất cả
+                    Hết & cận hạn
+                  </button>
+                  <button
+                    onClick={() => setExpiryFilter('all_stock')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                      expiryFilter === 'all_stock'
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                    title="Hiển thị tất cả các lô thuốc đang còn tồn kho (phù hợp khi thuốc bị hỏng, ẩm, vỡ, đổi màu hoặc thu hồi)"
+                  >
+                    Tất cả lô trong kho ({allStockBatches.length})
                   </button>
                 </div>
 
@@ -771,57 +901,715 @@ export const StockDisposalModal: React.FC<StockDisposalModalProps> = ({ onClose,
                 </div>
               </div>
 
-              {/* Council Members */}
+              {/* Council Members & Chỗ Ký Nhận */}
               <div className="bg-white p-5 rounded-2xl border border-slate-200 space-y-4 shadow-xs">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                  <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
-                    <UserCheck className="w-4 h-4 text-emerald-600" />
-                    <span>Hội Đồng Tiêu Hủy Dược Phẩm (Theo Quyết định Hiệu Trưởng)</span>
-                  </h3>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100">
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                      <FileSignature className="w-4 h-4 text-emerald-600" />
+                      <span>Hội Đồng Tiêu Hủy Dược Phẩm & Chỗ Ký Nhận Biên Bản</span>
+                    </h3>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Thành phần: <strong>Ban Giám hiệu</strong>, <strong>Nhân viên Y tế</strong> (Kế toán có thể có hoặc không). Chỗ ký nhận cho phép tự điền họ tên, sửa chức danh, ghi chú ký và tự thêm nội dung ký.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <label className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 cursor-pointer text-xs font-semibold text-slate-700 transition-colors shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={includeAccountant}
+                        onChange={(e) => setIncludeAccountant(e.target.checked)}
+                        className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                      />
+                      <span>Có Kế toán tham gia (Tùy chọn)</span>
+                    </label>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setExtraSigners((prev) => [
+                          ...prev,
+                          {
+                            roleTitle: `Người ký thứ ${prev.length + (includeAccountant ? 4 : 3)}`,
+                            name: '',
+                            position: 'Cán bộ giám sát / Người chứng kiến',
+                            signNote: '(Ký và ghi rõ họ tên)',
+                            signatureContent: '',
+                          },
+                        ])
+                      }
+                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-dashed border-indigo-300 bg-indigo-50/70 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold transition-colors cursor-pointer"
+                      title="Thêm một vị trí người ký hoặc chữ ký nhận bổ sung"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Tự thêm người ký</span>
+                    </button>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {councilMembers.map((member, idx) => (
-                    <div key={idx} className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center gap-2 text-xs">
-                      <div className="w-7 h-7 rounded-full bg-slate-200 text-slate-700 font-bold flex items-center justify-center text-[11px]">
-                        {idx + 1}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                  {/* 1. Ban Giám hiệu (Chủ tịch hội đồng / Phê duyệt) */}
+                  <div className="p-3.5 bg-blue-50/60 rounded-xl border border-blue-200 flex flex-col justify-between text-xs space-y-2.5">
+                    <div className="flex items-center justify-between border-b border-blue-100 pb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center text-[11px]">
+                          1
+                        </div>
+                        <span className="font-bold text-blue-900 text-xs">Chủ tịch hội đồng</span>
                       </div>
-                      <div className="flex-1 grid grid-cols-2 gap-2">
+                      <span className="px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 text-[10px] font-bold">
+                        Ban Giám hiệu • Bắt buộc
+                      </span>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div>
+                        <label className="block text-[11px] text-slate-600 font-semibold mb-1">
+                          Chức danh / Tiêu đề ký:
+                        </label>
+                        <input
+                          type="text"
+                          value={bghMember.roleTitle}
+                          onChange={(e) => setBghMember((prev) => ({ ...prev, roleTitle: e.target.value }))}
+                          placeholder="Chủ tịch hội đồng hoặc Ban Giám hiệu"
+                          className="w-full px-2.5 py-1.5 font-bold text-slate-900 bg-white border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] text-slate-600 font-semibold mb-1">
+                          Họ và tên đại diện BGH:
+                        </label>
+                        <input
+                          type="text"
+                          value={bghMember.name}
+                          onChange={(e) => setBghMember((prev) => ({ ...prev, name: e.target.value }))}
+                          placeholder="Ví dụ: Ban Giám hiệu hoặc Nguyễn Văn Hưng"
+                          className="w-full px-2.5 py-1.5 font-bold text-slate-900 bg-white border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] text-slate-600 font-medium mb-1">Chức vụ:</label>
+                        <input
+                          type="text"
+                          value={bghMember.position}
+                          onChange={(e) => setBghMember((prev) => ({ ...prev, position: e.target.value }))}
+                          placeholder="Đại diện Ban Giám hiệu"
+                          className="w-full px-2.5 py-1.5 text-slate-700 bg-white border border-slate-300 rounded-lg text-xs"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] text-slate-600 font-medium mb-1">
+                          Ghi chú ký dưới tiêu đề:
+                        </label>
+                        <input
+                          type="text"
+                          value={bghMember.signNote || '(Ký, đóng dấu duyệt)'}
+                          onChange={(e) => setBghMember((prev) => ({ ...prev, signNote: e.target.value }))}
+                          placeholder="(Ký, đóng dấu duyệt)"
+                          className="w-full px-2.5 py-1 text-slate-600 bg-white border border-slate-300 rounded-lg text-[11px]"
+                        />
+                      </div>
+
+                      <div className="pt-2 border-t border-blue-200/80">
+                        <label className="block text-[11px] text-blue-900 font-bold mb-1 flex items-center justify-between">
+                          <span className="flex items-center gap-1">
+                            <PenTool className="w-3 h-3 text-blue-600" />
+                            <span>Chỗ ký nhận (Nội dung ký tự điền):</span>
+                          </span>
+                          {bghMember.signatureContent && (
+                            <button
+                              type="button"
+                              onClick={() => setBghMember((prev) => ({ ...prev, signatureContent: '' }))}
+                              className="text-[10px] text-rose-600 hover:underline"
+                            >
+                              Xóa để ký tay
+                            </button>
+                          )}
+                        </label>
+                        <input
+                          type="text"
+                          value={bghMember.signatureContent || ''}
+                          onChange={(e) => setBghMember((prev) => ({ ...prev, signatureContent: e.target.value }))}
+                          placeholder="Để trống để in ra ký tay bút mực..."
+                          className="w-full px-2.5 py-1.5 text-xs bg-white border border-blue-300 rounded-lg font-semibold text-blue-950 placeholder:text-slate-400 placeholder:font-normal focus:ring-2 focus:ring-blue-500"
+                        />
+                        <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={() => setBghMember((prev) => ({ ...prev, signatureContent: '' }))}
+                            className={`px-2 py-0.5 rounded text-[10px] font-medium border transition-colors ${
+                              !bghMember.signatureContent
+                                ? 'bg-blue-600 text-white border-blue-600 font-bold'
+                                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                            }`}
+                          >
+                            Để trống ký tay
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setBghMember((prev) => ({ ...prev, signatureContent: 'Đã phê duyệt tiêu hủy' }))}
+                            className="px-2 py-0.5 rounded text-[10px] font-medium bg-white text-slate-600 border border-slate-200 hover:bg-blue-50 hover:text-blue-700 transition-colors"
+                          >
+                            + Đã phê duyệt
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setBghMember((prev) => ({ ...prev, signatureContent: 'Đồng ý tiêu hủy theo biên bản' }))}
+                            className="px-2 py-0.5 rounded text-[10px] font-medium bg-white text-slate-600 border border-slate-200 hover:bg-blue-50 hover:text-blue-700 transition-colors"
+                          >
+                            + Đồng ý theo biên bản
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 2. Nhân viên Y tế (Thư ký hội đồng / Người lập) */}
+                  <div className="p-3.5 bg-emerald-50/60 rounded-xl border border-emerald-200 flex flex-col justify-between text-xs space-y-2.5">
+                    <div className="flex items-center justify-between border-b border-emerald-100 pb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-full bg-emerald-600 text-white font-bold flex items-center justify-center text-[11px]">
+                          2
+                        </div>
+                        <span className="font-bold text-emerald-900 text-xs">Thư ký hội đồng</span>
+                      </div>
+                      <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                        Nhân viên Y tế • Bắt buộc
+                      </span>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div>
+                        <label className="block text-[11px] text-slate-600 font-semibold mb-1">
+                          Chức danh / Tiêu đề ký:
+                        </label>
+                        <input
+                          type="text"
+                          value={medicMember.roleTitle}
+                          onChange={(e) => setMedicMember((prev) => ({ ...prev, roleTitle: e.target.value }))}
+                          placeholder="Thư ký hội đồng hoặc Nhân viên Y tế"
+                          className="w-full px-2.5 py-1.5 font-bold text-slate-900 bg-white border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-emerald-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] text-slate-600 font-semibold mb-1">
+                          Họ và tên nhân viên Y tế:
+                        </label>
+                        <input
+                          type="text"
+                          value={medicMember.name}
+                          onChange={(e) => setMedicMember((prev) => ({ ...prev, name: e.target.value }))}
+                          placeholder="Ví dụ: Nhân viên Y tế"
+                          className="w-full px-2.5 py-1.5 font-bold text-slate-900 bg-white border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-emerald-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] text-slate-600 font-medium mb-1">Chức vụ:</label>
+                        <input
+                          type="text"
+                          value={medicMember.position}
+                          onChange={(e) => setMedicMember((prev) => ({ ...prev, position: e.target.value }))}
+                          placeholder="Phụ trách Phòng Y tế học đường"
+                          className="w-full px-2.5 py-1.5 text-slate-700 bg-white border border-slate-300 rounded-lg text-xs"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] text-slate-600 font-medium mb-1">
+                          Ghi chú ký dưới tiêu đề:
+                        </label>
+                        <input
+                          type="text"
+                          value={medicMember.signNote || '(Ký và ghi rõ họ tên)'}
+                          onChange={(e) => setMedicMember((prev) => ({ ...prev, signNote: e.target.value }))}
+                          placeholder="(Ký và ghi rõ họ tên)"
+                          className="w-full px-2.5 py-1 text-slate-600 bg-white border border-slate-300 rounded-lg text-[11px]"
+                        />
+                      </div>
+
+                      <div className="pt-2 border-t border-emerald-200/80">
+                        <label className="block text-[11px] text-emerald-900 font-bold mb-1 flex items-center justify-between">
+                          <span className="flex items-center gap-1">
+                            <PenTool className="w-3 h-3 text-emerald-600" />
+                            <span>Chỗ ký nhận (Nội dung ký tự điền):</span>
+                          </span>
+                          {medicMember.signatureContent && (
+                            <button
+                              type="button"
+                              onClick={() => setMedicMember((prev) => ({ ...prev, signatureContent: '' }))}
+                              className="text-[10px] text-rose-600 hover:underline"
+                            >
+                              Xóa để ký tay
+                            </button>
+                          )}
+                        </label>
+                        <input
+                          type="text"
+                          value={medicMember.signatureContent || ''}
+                          onChange={(e) => setMedicMember((prev) => ({ ...prev, signatureContent: e.target.value }))}
+                          placeholder="Để trống để in ra ký tay bút mực..."
+                          className="w-full px-2.5 py-1.5 text-xs bg-white border border-emerald-300 rounded-lg font-semibold text-emerald-950 placeholder:text-slate-400 placeholder:font-normal focus:ring-2 focus:ring-emerald-500"
+                        />
+                        <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={() => setMedicMember((prev) => ({ ...prev, signatureContent: '' }))}
+                            className={`px-2 py-0.5 rounded text-[10px] font-medium border transition-colors ${
+                              !medicMember.signatureContent
+                                ? 'bg-emerald-600 text-white border-emerald-600 font-bold'
+                                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                            }`}
+                          >
+                            Để trống ký tay
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setMedicMember((prev) => ({ ...prev, signatureContent: 'Đã kiểm tra & tiêu hủy an toàn' }))}
+                            className="px-2 py-0.5 rounded text-[10px] font-medium bg-white text-slate-600 border border-slate-200 hover:bg-emerald-50 hover:text-emerald-700 transition-colors"
+                          >
+                            + Đã kiểm tra & tiêu hủy
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setMedicMember((prev) => ({ ...prev, signatureContent: 'Y sĩ phụ trách đã thực hiện' }))}
+                            className="px-2 py-0.5 rounded text-[10px] font-medium bg-white text-slate-600 border border-slate-200 hover:bg-emerald-50 hover:text-emerald-700 transition-colors"
+                          >
+                            + Y sĩ đã thực hiện
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 3. Kế toán (Ủy viên - Có thể có hoặc không) */}
+                  {includeAccountant ? (
+                    <div className="p-3.5 bg-amber-50/60 rounded-xl border border-amber-200 flex flex-col justify-between text-xs space-y-2.5 relative animate-in fade-in zoom-in-95">
+                      <div className="flex items-center justify-between border-b border-amber-100 pb-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-full bg-amber-600 text-white font-bold flex items-center justify-center text-[11px]">
+                            3
+                          </div>
+                          <span className="font-bold text-amber-900 text-xs">Ủy viên hội đồng</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 text-[10px] font-bold">
+                            Kế toán (Tùy chọn)
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setIncludeAccountant(false)}
+                            className="text-slate-400 hover:text-rose-600 p-0.5 rounded cursor-pointer"
+                            title="Bỏ Kế toán khỏi Hội đồng"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
                         <div>
-                          <span className="text-[10px] text-slate-500 font-medium">{member.roleTitle}:</span>
+                          <label className="block text-[11px] text-slate-600 font-semibold mb-1">
+                            Chức danh / Tiêu đề ký:
+                          </label>
                           <input
                             type="text"
-                            value={member.name}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setCouncilMembers((prev) => {
-                                const next = [...prev];
-                                next[idx].name = val;
-                                return next;
-                              });
-                            }}
-                            className="w-full px-2 py-1 font-bold text-slate-800 bg-white border border-slate-300 rounded-lg text-xs"
+                            value={accountantMember.roleTitle}
+                            onChange={(e) => setAccountantMember((prev) => ({ ...prev, roleTitle: e.target.value }))}
+                            placeholder="Kế toán trường hoặc Ủy viên"
+                            className="w-full px-2.5 py-1.5 font-bold text-slate-900 bg-white border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-amber-500"
                           />
                         </div>
+
                         <div>
-                          <span className="text-[10px] text-slate-500 font-medium">Chức vụ:</span>
+                          <label className="block text-[11px] text-slate-600 font-semibold mb-1">
+                            Họ và tên Kế toán:
+                          </label>
                           <input
                             type="text"
-                            value={member.position}
+                            value={accountantMember.name}
+                            onChange={(e) => setAccountantMember((prev) => ({ ...prev, name: e.target.value }))}
+                            placeholder="Ví dụ: Kế toán trường hoặc Lê Thị Kim Cúc"
+                            className="w-full px-2.5 py-1.5 font-bold text-slate-900 bg-white border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-amber-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] text-slate-600 font-medium mb-1">Chức vụ:</label>
+                          <input
+                            type="text"
+                            value={accountantMember.position}
+                            onChange={(e) => setAccountantMember((prev) => ({ ...prev, position: e.target.value }))}
+                            placeholder="Kế toán trường"
+                            className="w-full px-2.5 py-1.5 text-slate-700 bg-white border border-slate-300 rounded-lg text-xs"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] text-slate-600 font-medium mb-1">
+                            Ghi chú ký dưới tiêu đề:
+                          </label>
+                          <input
+                            type="text"
+                            value={accountantMember.signNote || '(Ký và ghi rõ họ tên)'}
+                            onChange={(e) => setAccountantMember((prev) => ({ ...prev, signNote: e.target.value }))}
+                            placeholder="(Ký và ghi rõ họ tên)"
+                            className="w-full px-2.5 py-1 text-slate-600 bg-white border border-slate-300 rounded-lg text-[11px]"
+                          />
+                        </div>
+
+                        <div className="pt-2 border-t border-amber-200/80">
+                          <label className="block text-[11px] text-amber-900 font-bold mb-1 flex items-center justify-between">
+                            <span className="flex items-center gap-1">
+                              <PenTool className="w-3 h-3 text-amber-600" />
+                              <span>Chỗ ký nhận (Nội dung ký tự điền):</span>
+                            </span>
+                            {accountantMember.signatureContent && (
+                              <button
+                                type="button"
+                                onClick={() => setAccountantMember((prev) => ({ ...prev, signatureContent: '' }))}
+                                className="text-[10px] text-rose-600 hover:underline"
+                              >
+                                Xóa để ký tay
+                              </button>
+                            )}
+                          </label>
+                          <input
+                            type="text"
+                            value={accountantMember.signatureContent || ''}
+                            onChange={(e) => setAccountantMember((prev) => ({ ...prev, signatureContent: e.target.value }))}
+                            placeholder="Để trống để in ra ký tay bút mực..."
+                            className="w-full px-2.5 py-1.5 text-xs bg-white border border-amber-300 rounded-lg font-semibold text-amber-950 placeholder:text-slate-400 placeholder:font-normal focus:ring-2 focus:ring-amber-500"
+                          />
+                          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                            <button
+                              type="button"
+                              onClick={() => setAccountantMember((prev) => ({ ...prev, signatureContent: '' }))}
+                              className={`px-2 py-0.5 rounded text-[10px] font-medium border transition-colors ${
+                                !accountantMember.signatureContent
+                                ? 'bg-amber-600 text-white border-amber-600 font-bold'
+                                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                              }`}
+                            >
+                              Để trống ký tay
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setAccountantMember((prev) => ({ ...prev, signatureContent: 'Đã đối soát sổ kế toán' }))}
+                              className="px-2 py-0.5 rounded text-[10px] font-medium bg-white text-slate-600 border border-slate-200 hover:bg-amber-50 hover:text-amber-700 transition-colors"
+                            >
+                              + Đã đối soát sổ
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setAccountantMember((prev) => ({ ...prev, signatureContent: 'Đã ghi nhận trừ hao hụt' }))}
+                              className="px-2 py-0.5 rounded text-[10px] font-medium bg-white text-slate-600 border border-slate-200 hover:bg-amber-50 hover:text-amber-700 transition-colors"
+                            >
+                              + Đã ghi nhận trừ kho
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div
+                      onClick={() => setIncludeAccountant(true)}
+                      className="p-4 bg-slate-50/70 hover:bg-amber-50/50 rounded-xl border-2 border-dashed border-slate-300 hover:border-amber-400 flex flex-col items-center justify-center text-center cursor-pointer transition-all group min-h-[160px]"
+                    >
+                      <div className="w-9 h-9 rounded-full bg-slate-200 group-hover:bg-amber-200 text-slate-600 group-hover:text-amber-800 font-bold flex items-center justify-center text-base mb-2 transition-colors">
+                        +
+                      </div>
+                      <span className="font-bold text-slate-700 group-hover:text-amber-900 text-xs">
+                        Thêm Kế toán vào Hội đồng
+                      </span>
+                      <span className="text-[10px] text-slate-500 mt-1 max-w-[200px]">
+                        (Tùy chọn: có thể có hoặc không. Bấm vào đây để bật ký nhận của Kế toán)
+                      </span>
+                    </div>
+                  )}
+
+                  {/* 4. Các vị trí ký bổ sung tự thêm */}
+                  {extraSigners.map((extra, idx) => (
+                    <div
+                      key={idx}
+                      className="p-3.5 bg-purple-50/60 rounded-xl border border-purple-200 flex flex-col justify-between text-xs space-y-2.5 relative animate-in fade-in zoom-in-95"
+                    >
+                      <div className="flex items-center justify-between border-b border-purple-100 pb-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-full bg-purple-600 text-white font-bold flex items-center justify-center text-[11px]">
+                            {idx + (includeAccountant ? 4 : 3)}
+                          </div>
+                          <span className="font-bold text-purple-900 text-xs">
+                            {extra.roleTitle || `Người ký bổ sung #${idx + 1}`}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setExtraSigners((prev) => prev.filter((_, i) => i !== idx))}
+                          className="text-slate-400 hover:text-rose-600 p-0.5 rounded cursor-pointer"
+                          title="Xóa vị trí người ký này"
+                        >
+                          ✕
+                        </button>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div>
+                          <label className="block text-[11px] text-slate-600 font-semibold mb-1">
+                            Chức danh / Tiêu đề ký:
+                          </label>
+                          <input
+                            type="text"
+                            value={extra.roleTitle}
                             onChange={(e) => {
                               const val = e.target.value;
-                              setCouncilMembers((prev) => {
-                                const next = [...prev];
-                                next[idx].position = val;
-                                return next;
-                              });
+                              setExtraSigners((prev) =>
+                                prev.map((s, i) => (i === idx ? { ...s, roleTitle: val } : s))
+                              );
                             }}
-                            className="w-full px-2 py-1 text-slate-700 bg-white border border-slate-300 rounded-lg text-xs"
+                            placeholder="VD: Người chứng kiến / GVCN / Tổ trưởng"
+                            className="w-full px-2.5 py-1.5 font-bold text-slate-900 bg-white border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-purple-500"
                           />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] text-slate-600 font-semibold mb-1">
+                            Họ và tên người ký:
+                          </label>
+                          <input
+                            type="text"
+                            value={extra.name}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setExtraSigners((prev) =>
+                                prev.map((s, i) => (i === idx ? { ...s, name: val } : s))
+                              );
+                            }}
+                            placeholder="Nhập họ và tên người ký"
+                            className="w-full px-2.5 py-1.5 font-bold text-slate-900 bg-white border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-purple-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] text-slate-600 font-medium mb-1">Chức vụ:</label>
+                          <input
+                            type="text"
+                            value={extra.position}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setExtraSigners((prev) =>
+                                prev.map((s, i) => (i === idx ? { ...s, position: val } : s))
+                              );
+                            }}
+                            placeholder="VD: Cán bộ giám sát"
+                            className="w-full px-2.5 py-1.5 text-slate-700 bg-white border border-slate-300 rounded-lg text-xs"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] text-slate-600 font-medium mb-1">
+                            Ghi chú ký dưới tiêu đề:
+                          </label>
+                          <input
+                            type="text"
+                            value={extra.signNote || '(Ký và ghi rõ họ tên)'}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setExtraSigners((prev) =>
+                                prev.map((s, i) => (i === idx ? { ...s, signNote: val } : s))
+                              );
+                            }}
+                            placeholder="(Ký và ghi rõ họ tên)"
+                            className="w-full px-2.5 py-1 text-slate-600 bg-white border border-slate-300 rounded-lg text-[11px]"
+                          />
+                        </div>
+
+                        <div className="pt-2 border-t border-purple-200/80">
+                          <label className="block text-[11px] text-purple-900 font-bold mb-1 flex items-center justify-between">
+                            <span className="flex items-center gap-1">
+                              <PenTool className="w-3 h-3 text-purple-600" />
+                              <span>Chỗ ký nhận (Nội dung ký tự điền):</span>
+                            </span>
+                            {extra.signatureContent && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setExtraSigners((prev) =>
+                                    prev.map((s, i) => (i === idx ? { ...s, signatureContent: '' } : s))
+                                  );
+                                }}
+                                className="text-[10px] text-rose-600 hover:underline"
+                              >
+                                Xóa để ký tay
+                              </button>
+                            )}
+                          </label>
+                          <input
+                            type="text"
+                            value={extra.signatureContent || ''}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setExtraSigners((prev) =>
+                                prev.map((s, i) => (i === idx ? { ...s, signatureContent: val } : s))
+                              );
+                            }}
+                            placeholder="Để trống để in ra ký tay bút mực..."
+                            className="w-full px-2.5 py-1.5 text-xs bg-white border border-purple-300 rounded-lg font-semibold text-purple-950 placeholder:text-slate-400 placeholder:font-normal focus:ring-2 focus:ring-purple-500"
+                          />
+                          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setExtraSigners((prev) =>
+                                  prev.map((s, i) => (i === idx ? { ...s, signatureContent: '' } : s))
+                                );
+                              }}
+                              className={`px-2 py-0.5 rounded text-[10px] font-medium border transition-colors ${
+                                !extra.signatureContent
+                                ? 'bg-purple-600 text-white border-purple-600 font-bold'
+                                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                              }`}
+                            >
+                              Để trống ký tay
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setExtraSigners((prev) =>
+                                  prev.map((s, i) =>
+                                    i === idx ? { ...s, signatureContent: 'Đã chứng kiến tiêu hủy an toàn' } : s
+                                  )
+                                );
+                              }}
+                              className="px-2 py-0.5 rounded text-[10px] font-medium bg-white text-slate-600 border border-slate-200 hover:bg-purple-50 hover:text-purple-700 transition-colors"
+                            >
+                              + Đã chứng kiến an toàn
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>
                   ))}
+                </div>
+
+                {/* Live Preview Box of Signatures on A4 / Word */}
+                <div className="mt-4 p-4 rounded-xl border border-dashed border-slate-300 bg-slate-50/60 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                      <Printer className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Xem trước bố cục các ô ký nhận trên bản in A4 / Xuất Word:</span>
+                    </span>
+                    <span className="text-[11px] text-slate-400 italic">
+                      Tự động sắp xếp chuẩn văn bản hành chính Việt Nam
+                    </span>
+                  </div>
+
+                  <div className="overflow-x-auto bg-white p-3 rounded-lg border border-slate-200">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 text-center divide-x divide-slate-100 min-w-[500px]">
+                      {/* Cột 1: Thư ký / Nhân viên Y tế */}
+                      <div className="px-2 space-y-1">
+                        <div className="font-bold text-xs uppercase text-slate-900">
+                          {medicMember.roleTitle || 'THƯ KÝ HỘI ĐỒNG'}
+                        </div>
+                        <div className="text-[10px] italic text-slate-500">
+                          {medicMember.signNote || '(Ký và ghi rõ họ tên)'}
+                        </div>
+                        <div className="min-h-[46px] flex items-center justify-center py-1">
+                          {medicMember.signatureContent?.trim() ? (
+                            <span className="font-serif italic font-bold text-emerald-800 text-xs px-2 py-1 bg-emerald-50 rounded border border-emerald-200">
+                              {medicMember.signatureContent}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-slate-300 italic border-b border-dashed border-slate-300 pb-0.5">
+                              [Để trống ký tay bút mực]
+                            </span>
+                          )}
+                        </div>
+                        <div className="font-bold text-xs text-slate-900">{medicMember.name || 'Nhân viên Y tế'}</div>
+                        <div className="text-[10px] text-slate-500">{medicMember.position}</div>
+                      </div>
+
+                      {/* Cột 2 (Nếu có): Kế toán trường */}
+                      {includeAccountant && (
+                        <div className="px-2 space-y-1">
+                          <div className="font-bold text-xs uppercase text-slate-900">
+                            {accountantMember.roleTitle || 'KẾ TOÁN TRƯỜNG'}
+                          </div>
+                          <div className="text-[10px] italic text-slate-500">
+                            {accountantMember.signNote || '(Ký và ghi rõ họ tên)'}
+                          </div>
+                          <div className="min-h-[46px] flex items-center justify-center py-1">
+                            {accountantMember.signatureContent?.trim() ? (
+                              <span className="font-serif italic font-bold text-amber-800 text-xs px-2 py-1 bg-amber-50 rounded border border-amber-200">
+                                {accountantMember.signatureContent}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-slate-300 italic border-b border-dashed border-slate-300 pb-0.5">
+                                [Để trống ký tay bút mực]
+                              </span>
+                            )}
+                          </div>
+                          <div className="font-bold text-xs text-slate-900">
+                            {accountantMember.name || 'Kế toán trường'}
+                          </div>
+                          <div className="text-[10px] text-slate-500">{accountantMember.position}</div>
+                        </div>
+                      )}
+
+                      {/* Cột người ký thêm */}
+                      {extraSigners.map((ext, i) => (
+                        <div key={i} className="px-2 space-y-1">
+                          <div className="font-bold text-xs uppercase text-slate-900">
+                            {ext.roleTitle || `NGƯỜI KÝ #${i + 1}`}
+                          </div>
+                          <div className="text-[10px] italic text-slate-500">
+                            {ext.signNote || '(Ký và ghi rõ họ tên)'}
+                          </div>
+                          <div className="min-h-[46px] flex items-center justify-center py-1">
+                            {ext.signatureContent?.trim() ? (
+                              <span className="font-serif italic font-bold text-purple-800 text-xs px-2 py-1 bg-purple-50 rounded border border-purple-200">
+                                {ext.signatureContent}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-slate-300 italic border-b border-dashed border-slate-300 pb-0.5">
+                                [Để trống ký tay bút mực]
+                              </span>
+                            )}
+                          </div>
+                          <div className="font-bold text-xs text-slate-900">{ext.name || 'Họ và tên'}</div>
+                          <div className="text-[10px] text-slate-500">{ext.position}</div>
+                        </div>
+                      ))}
+
+                      {/* Cột bên phải cùng: Ban Giám hiệu (Chủ tịch hội đồng) */}
+                      <div className="px-2 space-y-1">
+                        <div className="font-bold text-xs uppercase text-slate-900">
+                          {bghMember.roleTitle || 'CHỦ TỊCH HỘI ĐỒNG'}
+                        </div>
+                        <div className="text-[10px] italic text-slate-500">
+                          {bghMember.signNote || '(Ký, đóng dấu duyệt)'}
+                        </div>
+                        <div className="min-h-[46px] flex items-center justify-center py-1">
+                          {bghMember.signatureContent?.trim() ? (
+                            <span className="font-serif italic font-bold text-blue-800 text-xs px-2 py-1 bg-blue-50 rounded border border-blue-200">
+                              {bghMember.signatureContent}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-slate-300 italic border-b border-dashed border-slate-300 pb-0.5">
+                              [Để trống ký tay bút mực]
+                            </span>
+                          )}
+                        </div>
+                        <div className="font-bold text-xs text-slate-900">{bghMember.name || 'Ban Giám hiệu'}</div>
+                        <div className="text-[10px] text-slate-500">{bghMember.position}</div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -912,28 +1700,23 @@ export const StockDisposalModal: React.FC<StockDisposalModalProps> = ({ onClose,
 
                 {/* Submit Actions */}
                 <div className="pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 flex-wrap">
                     <button
                       type="button"
                       onClick={() => handleSaveDisposal(false)}
-                      className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl border border-slate-300"
+                      className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl border border-slate-300 transition-colors"
+                      title="Lưu biên bản dự thảo vào sổ lưu trữ, tồn kho các lô thuốc chưa thay đổi"
                     >
-                      Lưu Dự Thảo / Chờ Quản Trị Duyệt
+                      Lưu Bản Nháp (Tồn kho chưa đổi)
                     </button>
-                    {db.hasPermission('canApproveInventoryAdjustment') ? (
-                      <button
-                        type="button"
-                        onClick={() => handleSaveDisposal(true)}
-                        className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs"
-                      >
-                        Phê Duyệt Tiêu Hủy & Trừ Kho Tự Động (Quản trị)
-                      </button>
-                    ) : (
-                      <span className="px-3.5 py-2 bg-amber-50 text-amber-800 border border-amber-200 rounded-xl text-xs font-semibold">
-                        Nhiệm vụ Nhân viên Y tế: Lập biên bản chờ Quản trị phê duyệt trừ kho
-                      </span>
-                    )}
-                  </div>
+                    <button
+                      type="button"
+                      onClick={() => handleSaveDisposal(true)}
+                      className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center gap-1.5"
+                      title="Xác nhận hoàn tất tiêu hủy thuốc, ghi nhận phiếu xuất hủy và trừ kho ngay lập tức"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      Xác Nhận Tiêu Hủy & Trừ Kho Ngay
+                    </button>
 
                   <button
                     type="button"
@@ -959,6 +1742,32 @@ export const StockDisposalModal: React.FC<StockDisposalModalProps> = ({ onClose,
                   onClick={() => {
                     setEditingDisposalId(null);
                     setFormItems([]);
+                    setBghMember({
+                      roleTitle: 'P. HIỆU TRƯỞNG',
+                      name: 'Trần Thị Thanh Hiền',
+                      position: 'Phó Hiệu trưởng',
+                      signNote: '',
+                      signatureContent: '',
+                    });
+                    setMedicMember({
+                      roleTitle: 'NHÂN VIÊN Y TẾ',
+                      name: db.getCurrentUser()?.fullName?.replace(/^Cô\s+|^Thầy\s+/, '') || 'Đoàn Thị Minh Trang',
+                      position: 'Phụ trách Phòng Y tế học đường',
+                      signNote: '',
+                      signatureContent: '',
+                    });
+                    setAccountantMember({
+                      roleTitle: 'KẾ TOÁN TRƯỜNG',
+                      name: 'Lê Thị Kim Cúc',
+                      position: 'Kế toán trường',
+                      signNote: '',
+                      signatureContent: '',
+                    });
+                    setWitnessNotes(
+                      'Hội đồng đã kiểm tra đúng chủng loại, số lượng, niêm phong và tiêu hủy an toàn theo quy định. | Biên bản thực tế: Tiêu hủy và xuất trừ kho tự động.'
+                    );
+                    setIncludeAccountant(false);
+                    setExtraSigners([]);
                     setActiveTab('check_expiry');
                   }}
                   className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-rose-600 text-white rounded-xl text-xs font-bold hover:bg-rose-700"
@@ -1000,10 +1809,12 @@ export const StockDisposalModal: React.FC<StockDisposalModalProps> = ({ onClose,
                             {d.status === 'completed'
                               ? 'ĐÃ TIÊU HỦY & TRỪ KHO'
                               : d.status === 'approved'
-                              ? 'ĐÃ DUYỆT'
+                              ? 'ĐÃ DUYỆT (CHỜ XUẤT TRỪ KHO)'
+                              : d.status === 'draft'
+                              ? 'BẢN NHÁP (CHƯA TRỪ KHO)'
                               : d.status === 'cancelled'
-                              ? 'ĐÃ HỦY'
-                              : 'CHỜ DUYỆT'}
+                              ? 'ĐÃ HỦY BỎ'
+                              : 'CHỜ DUYỆT (CHƯA TRỪ KHO)'}
                           </span>
                         </div>
 
@@ -1027,6 +1838,30 @@ export const StockDisposalModal: React.FC<StockDisposalModalProps> = ({ onClose,
                           <strong>{d.createdByName}</strong>
                         </div>
                       </div>
+
+                      {/* Hội đồng & Chữ ký */}
+                      {d.councilMembers && d.councilMembers.length > 0 && (
+                        <div className="text-[11px] text-slate-600 bg-slate-50/60 p-2.5 rounded-xl border border-slate-200/80 flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-slate-700 flex items-center gap-1">
+                            <FileSignature className="w-3.5 h-3.5 text-indigo-600" />
+                            <span>Ký nhận:</span>
+                          </span>
+                          {d.councilMembers.map((m, idx) => (
+                            <span
+                              key={idx}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-slate-200 rounded-md text-slate-800"
+                            >
+                              <span className="text-[10px] text-slate-400">{m.roleTitle}:</span>
+                              <strong className="text-slate-900">{m.name}</strong>
+                              {m.signatureContent?.trim() ? (
+                                <span className="text-indigo-600 italic font-semibold">({m.signatureContent})</span>
+                              ) : (
+                                <span className="text-slate-400 italic">(Ký tay)</span>
+                              )}
+                            </span>
+                          ))}
+                        </div>
+                      )}
 
                       {/* Actions */}
                       <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100">
@@ -1069,16 +1904,15 @@ export const StockDisposalModal: React.FC<StockDisposalModalProps> = ({ onClose,
                               >
                                 Sửa
                               </button>
-                              {db.hasPermission('canApproveInventoryAdjustment') &&
-                                db.hasPermission('canManageTransactions') && (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleExecuteFromHistory(d)}
-                                    className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-semibold"
-                                  >
-                                    Xác nhận trừ kho
-                                  </button>
-                                )}
+                              <button
+                                type="button"
+                                onClick={() => handleExecuteFromHistory(d)}
+                                className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1 shadow-xs transition-colors"
+                                title="Thực hiện trừ kho cho biên bản này"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                Xác nhận trừ kho
+                              </button>
                             </>
                           )}
                           <button

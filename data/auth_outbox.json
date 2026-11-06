@@ -1,0 +1,14 @@
+[
+  {
+    "id": "mail-1793955680683-vykq",
+    "to": "yte_kiemthu@thcsdongthanh.edu.vn",
+    "username": "yte_kiemthu",
+    "fullName": "Nguyễn Thị Kiểm Thử",
+    "subject": "[Y tế THCS Đông Thạnh] Thiết lập mật khẩu tài khoản thành viên",
+    "type": "setup",
+    "link": "http://127.0.0.1:3000/?setupToken=0b07ce5f320a182566ce0c79c42b80bd96798f3f3b0f2a5097b283fc1708f119",
+    "expiresAt": "2026-11-07T09:01:20.682Z",
+    "sentViaSmtp": false,
+    "createdAt": "2026-11-06T09:01:20.683Z"
+  }
+]

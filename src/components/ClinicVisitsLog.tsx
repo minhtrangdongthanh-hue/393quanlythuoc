@@ -215,7 +215,16 @@ export const ClinicVisitsLog: React.FC<ClinicVisitsLogProps> = ({
               : ''
           }</td>
               <td>${v.outcome || 'Đã ổn định'}</td>
-              <td class="text-center italic">${(v.performer || 'Y sĩ').split(' ').pop()}</td>
+              <td class="text-center italic">${(() => {
+                let sig = v.signatureNote || '';
+                if (!sig) {
+                  try {
+                    const savedMap = JSON.parse(localStorage.getItem('thcs_dt_custom_signatures_v1') || '{}');
+                    if (savedMap && savedMap[v.id]) sig = savedMap[v.id];
+                  } catch {}
+                }
+                return sig;
+              })()}</td>
             </tr>
           `;
         })

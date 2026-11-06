@@ -1,0 +1,29 @@
+[
+  {
+    "tokenHash": "7953435a94c34e3b0ea3d2ffd5209ef27ba75e1a854aa7bf019efe5e5e749a37",
+    "userId": "role-admin",
+    "createdAt": "2026-11-06T09:01:19.379Z",
+    "expiresAt": "2026-11-07T09:01:19.379Z",
+    "lastActiveAt": "2026-11-06T09:01:21.190Z",
+    "ip": "127.0.0.1",
+    "userAgent": "node"
+  },
+  {
+    "tokenHash": "f1a218abd5c08bbb232a1a34ad200a84e65d307f92de728ebd60a7b7a137c4d7",
+    "userId": "role-admin",
+    "createdAt": "2026-11-06T09:01:20.654Z",
+    "expiresAt": "2026-11-07T09:01:20.654Z",
+    "lastActiveAt": "2026-11-06T09:01:20.654Z",
+    "ip": "127.0.0.1",
+    "userAgent": "node"
+  },
+  {
+    "tokenHash": "d7da1546b75e00dc35aaa0365e2e181a2d1f09af32ff1f55f114643e3627ac9f",
+    "userId": "role-admin",
+    "createdAt": "2026-11-06T11:43:57.997Z",
+    "expiresAt": "2026-11-07T11:43:57.997Z",
+    "lastActiveAt": "2026-11-06T11:43:57.997Z",
+    "ip": "127.0.0.1",
+    "userAgent": "node"
+  }
+]

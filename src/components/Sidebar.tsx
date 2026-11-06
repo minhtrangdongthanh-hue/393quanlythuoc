@@ -21,7 +21,6 @@ import {
   Printer,
   FileSpreadsheet,
   GraduationCap,
-  Sparkles,
   HeartPulse,
   LogOut,
   ChevronLeft,

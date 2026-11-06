@@ -264,8 +264,117 @@ export function normalizeManualTime24H(input?: string | null): string {
 }
 
 /**
- * Hiển thị Ngày và Giờ theo chuẩn 24 giờ (HH:mm DD/MM/YYYY)
- * Ví dụ: "14:35 30/03/2026"
+ * Định dạng Ngày và Giờ chuẩn 24 giờ: DD/MM/YYYY HH:mm
+ * Ví dụ: "03/11/2026 14:30"
+ */
+export function formatDateTime24H(date?: Date | string | number | null): string {
+  if (!date) {
+    const now = new Date();
+    const d = String(now.getDate()).padStart(2, '0');
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const y = now.getFullYear();
+    const hr = String(now.getHours()).padStart(2, '0');
+    const min = String(now.getMinutes()).padStart(2, '0');
+    return `${d}/${m}/${y} ${hr}:${min}`;
+  }
+
+  // Nếu chuỗi đã chuẩn định dạng DD/MM/YYYY HH:mm
+  if (typeof date === 'string') {
+    const s = date.trim();
+    if (/^\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}$/.test(s)) {
+      return s;
+    }
+    // Match DD/MM/YYYY hoặc DD-MM-YYYY kèm giờ phút
+    const dmyMatch = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})(?:[\s,T]+(\d{1,2}):(\d{1,2}))?/);
+    if (dmyMatch) {
+      const d = String(dmyMatch[1]).padStart(2, '0');
+      const m = String(dmyMatch[2]).padStart(2, '0');
+      const y = dmyMatch[3];
+      const hr = String(dmyMatch[4] || '00').padStart(2, '0');
+      const min = String(dmyMatch[5] || '00').padStart(2, '0');
+      return `${d}/${m}/${y} ${hr}:${min}`;
+    }
+  }
+
+  const dObj = typeof date === 'string' || typeof date === 'number' ? new Date(date) : date;
+  if (isNaN(dObj.getTime())) {
+    return String(date);
+  }
+  const day = String(dObj.getDate()).padStart(2, '0');
+  const month = String(dObj.getMonth() + 1).padStart(2, '0');
+  const year = dObj.getFullYear();
+  const hours = String(dObj.getHours()).padStart(2, '0');
+  const minutes = String(dObj.getMinutes()).padStart(2, '0');
+  return `${day}/${month}/${year} ${hours}:${minutes}`;
+}
+
+/**
+ * Chuyển đổi chuỗi ngày giờ linh hoạt (đặc biệt là DD/MM/YYYY HH:mm gõ tay)
+ * thành chuỗi ISO YYYY-MM-DDTHH:mm:ss để lưu trữ và truy vấn CSDL chính xác
+ */
+export function parseDateTimeToISO(inputStr?: string | null): string {
+  if (!inputStr) return new Date().toISOString();
+  const s = String(inputStr).trim();
+
+  // Pattern DD/MM/YYYY HH:mm (hoặc DD-MM-YYYY HH:mm)
+  const dmyMatch = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})(?:[\s,T]+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?$/);
+  if (dmyMatch) {
+    const day = parseInt(dmyMatch[1], 10);
+    const month = parseInt(dmyMatch[2], 10);
+    const year = parseInt(dmyMatch[3], 10);
+    const hours = dmyMatch[4] !== undefined ? parseInt(dmyMatch[4], 10) : new Date().getHours();
+    const minutes = dmyMatch[5] !== undefined ? parseInt(dmyMatch[5], 10) : new Date().getMinutes();
+    const seconds = dmyMatch[6] !== undefined ? parseInt(dmyMatch[6], 10) : 0;
+
+    const isoYear = String(year).padStart(4, '0');
+    const isoMonth = String(month).padStart(2, '0');
+    const isoDay = String(day).padStart(2, '0');
+    const isoHour = String(hours).padStart(2, '0');
+    const isoMin = String(minutes).padStart(2, '0');
+    const isoSec = String(seconds).padStart(2, '0');
+    return `${isoYear}-${isoMonth}-${isoDay}T${isoHour}:${isoMin}:${isoSec}`;
+  }
+
+  // Nếu đã là YYYY-MM-DDTHH:mm
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+    return s.includes('T') ? s : s.replace(' ', 'T');
+  }
+
+  const d = new Date(s);
+  if (!isNaN(d.getTime())) {
+    return d.toISOString();
+  }
+
+  return new Date().toISOString();
+}
+
+/**
+ * Kiểm tra tính hợp lệ của chuỗi DD/MM/YYYY HH:mm
+ */
+export function isValidDateTime24H(inputStr: string): boolean {
+  if (!inputStr || typeof inputStr !== 'string') return false;
+  const s = inputStr.trim();
+  const match = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})[\s,T]+(\d{1,2}):(\d{1,2})$/);
+  if (!match) return false;
+  const day = parseInt(match[1], 10);
+  const month = parseInt(match[2], 10);
+  const year = parseInt(match[3], 10);
+  const hours = parseInt(match[4], 10);
+  const minutes = parseInt(match[5], 10);
+
+  if (month < 1 || month > 12) return false;
+  if (day < 1 || day > 31) return false;
+  if (year < 2000 || year > 2100) return false;
+  if (hours < 0 || hours > 23) return false;
+  if (minutes < 0 || minutes > 59) return false;
+
+  const d = new Date(year, month - 1, day, hours, minutes);
+  return d.getFullYear() === year && d.getMonth() === month - 1 && d.getDate() === day;
+}
+
+/**
+ * Hiển thị Ngày và Giờ theo chuẩn 24 giờ: DD/MM/YYYY HH:mm
+ * Ví dụ: "03/11/2026 14:30"
  */
 export function formatDateTimeVN(dateStr?: string | Date | null, timeIn?: string | null): string {
   if (!dateStr) return '';
@@ -274,17 +383,10 @@ export function formatDateTimeVN(dateStr?: string | Date | null, timeIn?: string
   if (timeIn && typeof dateStr === 'string' && !dateStr.includes('T')) {
     const t = formatTime24H(timeIn);
     const d = formatDateVN(dateStr);
-    return t ? `${t} ${d}` : d;
+    return t ? `${d} ${t}` : d;
   }
 
-  const d = typeof dateStr === 'string' ? new Date(dateStr) : dateStr;
-  if (isNaN(d.getTime())) return String(dateStr);
-  const hours = String(d.getHours()).padStart(2, '0');
-  const minutes = String(d.getMinutes()).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const year = d.getFullYear();
-  return `${hours}:${minutes} ${day}/${month}/${year}`;
+  return formatDateTime24H(dateStr);
 }
 
 export function formatVND(amount: number | undefined | null): string {

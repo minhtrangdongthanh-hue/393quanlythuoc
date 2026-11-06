@@ -20,6 +20,8 @@ import {
   Share2,
   Eye,
   EyeOff,
+  KeyRound,
+  Lock,
 } from 'lucide-react';
 import { User, UserRole } from '../types';
 import { db, getRoleLabel } from '../services/db';
@@ -60,6 +62,13 @@ export const Header: React.FC<HeaderProps> = ({
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [privacyMode, setPrivacyMode] = useState<boolean>(() => db.isPrivacyModeEnabled());
+  const [changePwdOpen, setChangePwdOpen] = useState(false);
+  const [currentPwd, setCurrentPwd] = useState('');
+  const [newPwd, setNewPwd] = useState('');
+  const [confirmPwd, setConfirmPwd] = useState('');
+  const [pwdLoading, setPwdLoading] = useState(false);
+  const [pwdError, setPwdError] = useState<string | null>(null);
+  const [pwdSuccess, setPwdSuccess] = useState<string | null>(null);
   const [counts, setCounts] = useState(() => ({
     visits: db.getClinicVisits().length,
     todayVisits: db.getTodayClinicVisits().length,
@@ -115,7 +124,11 @@ export const Header: React.FC<HeaderProps> = ({
   const handleManualSync = async () => {
     setIsManualSyncing(true);
     try {
+      // 1. Push local changes immediately so newly saved dispatches/records are preserved on the server
+      await db.pushStateToServer();
+      // 2. Pull and merge any changes from server and other machines
       await db.pullFromServerAndMerge(true);
+      // 3. Confirm merged state is saved
       await db.pushStateToServer();
       await db.syncAllToCloud();
       setCounts({
@@ -386,76 +399,71 @@ export const Header: React.FC<HeaderProps> = ({
               )}
             </button>
 
-            {/* Role indicator with 2-role Quick Switch Dropdown */}
+            {/* Member Account Profile & Security Menu */}
             <div className="relative" ref={roleMenuRef}>
               <button
                 type="button"
                 onClick={() => setRoleMenuOpen(!roleMenuOpen)}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all shadow-2xs ${getRoleBadgeClasses(
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all shadow-2xs cursor-pointer ${getRoleBadgeClasses(
                   currentUser?.role
                 )}`}
-                title="Nhấn để chuyển đổi giữa 2 nhiệm vụ: Quản trị & Nhân viên Y tế"
+                title="Thông tin tài khoản & Đổi mật khẩu"
               >
                 {getRoleIcon(currentUser?.role)}
                 <div className="text-left">
                   <span className="block text-[10px] uppercase tracking-wider font-extrabold opacity-80">
-                    Nhiệm vụ
-                  </span>
-                  <span className="hidden sm:inline font-semibold text-slate-900 truncate max-w-[130px]">
                     {getRoleLabel(currentUser?.role || 'medic')}
+                  </span>
+                  <span className="hidden sm:inline font-semibold text-slate-900 truncate max-w-[140px]">
+                    {currentUser?.fullName || currentUser?.username}
                   </span>
                 </div>
                 <ChevronDown className="w-3.5 h-3.5 opacity-70 ml-0.5" />
               </button>
 
-              {/* 2-Role Menu: Quản trị & Nhân viên Y tế */}
               {roleMenuOpen && (
-                <div className="absolute right-0 mt-1.5 w-64 bg-white rounded-2xl shadow-xl border border-slate-200 p-2 z-50 text-xs space-y-1 animate-in fade-in zoom-in-95 duration-150">
-                  <div className="px-3 py-2 border-b border-slate-100">
-                    <p className="font-bold text-slate-900 text-xs">Chọn Nhiệm Vụ Làm Việc</p>
-                    <p className="text-[11px] text-slate-500">Phân quyền rõ ràng 2 nhiệm vụ:</p>
+                <div className="absolute right-0 mt-1.5 w-72 bg-white rounded-2xl shadow-xl border border-slate-200 p-3 z-50 text-xs space-y-2 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="pb-2.5 border-b border-slate-100">
+                    <p className="font-black text-slate-900 text-xs">{currentUser?.fullName}</p>
+                    <p className="text-[11px] text-slate-500 font-mono">
+                      TK: {currentUser?.username} {currentUser?.email ? `• ${currentUser.email}` : ''}
+                    </p>
+                    <span className="inline-block mt-1 px-2 py-0.5 rounded bg-indigo-50 text-indigo-800 font-bold text-[10px] border border-indigo-200">
+                      Vai trò: {getRoleLabel(currentUser?.role || 'medic')}
+                    </span>
                   </div>
 
-                  {/* 1. Quản trị */}
                   <button
                     type="button"
-                    onClick={() => handleRoleSwitch('admin')}
-                    className={`w-full flex items-start gap-2.5 p-2 rounded-xl transition-colors text-left ${
-                      currentUser?.role === 'admin' || currentUser?.role === 'bgh'
-                        ? 'bg-indigo-50 text-indigo-950 font-bold border border-indigo-200'
-                        : 'hover:bg-slate-50 text-slate-700'
-                    }`}
+                    onClick={() => {
+                      setRoleMenuOpen(false);
+                      setCurrentPwd('');
+                      setNewPwd('');
+                      setConfirmPwd('');
+                      setPwdError(null);
+                      setPwdSuccess(null);
+                      setChangePwdOpen(true);
+                    }}
+                    className="w-full flex items-center gap-2.5 p-2 rounded-xl hover:bg-slate-100 text-slate-800 font-bold transition-colors text-left cursor-pointer"
                   >
-                    <div className="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0 mt-0.5">
-                      <ShieldCheck className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <span className="font-bold text-xs block text-indigo-900">1. Quản trị (8/8 quyền)</span>
-                      <span className="text-[10px] text-slate-500 block leading-tight">
-                        Toàn quyền quản trị hệ thống, phê duyệt kiểm kê/hủy thuốc & sao lưu
-                      </span>
-                    </div>
+                    <KeyRound className="w-4 h-4 text-indigo-600 shrink-0" />
+                    <span>Đổi mật khẩu cá nhân</span>
                   </button>
 
-                  {/* 2. Nhân viên Y tế */}
                   <button
                     type="button"
-                    onClick={() => handleRoleSwitch('medic')}
-                    className={`w-full flex items-start gap-2.5 p-2 rounded-xl transition-colors text-left ${
-                      currentUser?.role === 'medic'
-                        ? 'bg-emerald-50 text-emerald-950 font-bold border border-emerald-200'
-                        : 'hover:bg-slate-50 text-slate-700'
-                    }`}
+                    onClick={() => {
+                      setRoleMenuOpen(false);
+                      if (onLogout) {
+                        onLogout();
+                      } else {
+                        logout();
+                      }
+                    }}
+                    className="w-full flex items-center gap-2.5 p-2 rounded-xl hover:bg-rose-50 text-rose-700 font-bold transition-colors text-left cursor-pointer"
                   >
-                    <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 mt-0.5">
-                      <Stethoscope className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <span className="font-bold text-xs block text-emerald-900">2. Nhân viên Y tế (6/8 quyền)</span>
-                      <span className="text-[10px] text-slate-500 block leading-tight">
-                        Khám sơ cứu, cân đối thuốc theo cân nặng, nhập xuất kho FEFO & in A4
-                      </span>
-                    </div>
+                    <LogOut className="w-4 h-4 text-rose-600 shrink-0" />
+                    <span>Đăng xuất khỏi hệ thống</span>
                   </button>
                 </div>
               )}
@@ -597,6 +605,152 @@ export const Header: React.FC<HeaderProps> = ({
                 Đã hiểu & Đóng
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Đổi mật khẩu cá nhân */}
+      {changePwdOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 text-xs">
+            <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+                  <KeyRound className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-base text-slate-900">Đổi Mật Khẩu Cá Nhân</h3>
+                  <p className="text-slate-500">
+                    Tài khoản: <strong>{currentUser?.fullName}</strong> (
+                    <code className="font-mono">{currentUser?.username}</code>)
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setChangePwdOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {pwdError && (
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 font-semibold">
+                {pwdError}
+              </div>
+            )}
+            {pwdSuccess && (
+              <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 font-semibold">
+                {pwdSuccess}
+              </div>
+            )}
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                setPwdError(null);
+                setPwdSuccess(null);
+                if (newPwd.length < 8) {
+                  setPwdError('Mật khẩu mới phải có ít nhất 8 ký tự.');
+                  return;
+                }
+                if (newPwd !== confirmPwd) {
+                  setPwdError('Mật khẩu xác nhận không khớp.');
+                  return;
+                }
+                setPwdLoading(true);
+                try {
+                  const res = await fetch('/api/auth/change-password', {
+                    method: 'POST',
+                    headers: db.getAuthHeaders(),
+                    body: JSON.stringify({
+                      currentPassword: currentPwd,
+                      newPassword: newPwd,
+                    }),
+                  });
+                  const data = await res.json();
+                  if (!res.ok || !data.ok) {
+                    setPwdError(data.error || 'Không thể đổi mật khẩu.');
+                    return;
+                  }
+                  if (data.user) {
+                    db.setCurrentUser(data.user);
+                  }
+                  setPwdSuccess('Đã cập nhật mật khẩu mới thành công!');
+                  setTimeout(() => setChangePwdOpen(false), 1500);
+                } catch {
+                  setPwdError('Lỗi kết nối máy chủ.');
+                } finally {
+                  setPwdLoading(false);
+                }
+              }}
+              className="space-y-3"
+            >
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Mật khẩu hiện tại</label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="password"
+                    required
+                    value={currentPwd}
+                    onChange={(e) => setCurrentPwd(e.target.value)}
+                    placeholder="Nhập mật khẩu hiện tại..."
+                    className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  Mật khẩu mới (Tối thiểu 8 ký tự, gồm chữ và số)
+                </label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="password"
+                    required
+                    value={newPwd}
+                    onChange={(e) => setNewPwd(e.target.value)}
+                    placeholder="Nhập mật khẩu mới..."
+                    className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Xác nhận mật khẩu mới</label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="password"
+                    required
+                    value={confirmPwd}
+                    onChange={(e) => setConfirmPwd(e.target.value)}
+                    placeholder="Nhập lại mật khẩu mới..."
+                    className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setChangePwdOpen(false)}
+                  className="px-4 py-2 rounded-xl font-bold text-slate-600 hover:bg-slate-100 cursor-pointer"
+                >
+                  Đóng
+                </button>
+                <button
+                  type="submit"
+                  disabled={pwdLoading}
+                  className="px-4 py-2 rounded-xl font-bold bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer disabled:opacity-50"
+                >
+                  {pwdLoading ? 'Đang lưu...' : 'Lưu mật khẩu mới'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

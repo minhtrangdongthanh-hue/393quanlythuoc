@@ -31,6 +31,10 @@ import {
   MedicineDisposalItem,
   DisposalCouncilMember,
   DisposalStatus,
+  SanitaryNapkinProduct,
+  SanitaryNapkinDispatch,
+  SanitaryNapkinImport,
+  SanitaryNapkinSettings,
 } from '../types';
 import {
   DEFAULT_CLASSES,
@@ -112,6 +116,7 @@ import {
   cleanSearchQuery,
   removeVietnameseTones,
   maskStudentName,
+  parseDateTimeToISO,
 } from '../utils/helpers';
 
 const STORAGE_KEYS = {
@@ -134,6 +139,10 @@ const STORAGE_KEYS = {
   SCHOOL_CLASSES: 'thcs_dongthanh_school_classes_v1',
   DISPOSALS: 'thcs_dongthanh_disposals_v1',
   STAFF_MEMBERS: 'thcs_dongthanh_staff_members_v1',
+  SANITARY_PRODUCTS: 'thcs_dongthanh_sanitary_products_v1',
+  SANITARY_DISPATCHES: 'thcs_dongthanh_sanitary_dispatches_v1',
+  SANITARY_IMPORTS: 'thcs_dongthanh_sanitary_imports_v1',
+  SANITARY_SETTINGS: 'thcs_dongthanh_sanitary_settings_v1',
   INITIALIZED_FLAG: 'thcs_dongthanh_app_initialized_v2',
 };
 
@@ -145,7 +154,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   warningExpiringDays: 30,
   warningNoticeDays: 60,
   clinicLocation: 'Phòng Y tế Học đường - Khu Hiệu Bộ',
-  nurseInCharge: 'Nhân viên Y tế học đường',
+  nurseInCharge: 'Cô Đoàn Thị Minh Trang',
 };
 
 export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, UserPermission> = {
@@ -2063,11 +2072,6 @@ export const INITIAL_DISPOSALS: MedicineDisposal[] = [
         name: 'Lê Thị Kim Cúc',
         position: 'Kế toán trường',
       },
-      {
-        roleTitle: 'Ủy viên giám sát',
-        name: 'Trần Minh Tuấn',
-        position: 'Chủ tịch Công đoàn / Trưởng ban TTND',
-      },
     ],
     items: [
       {
@@ -2129,6 +2133,184 @@ export const INITIAL_DISPOSALS: MedicineDisposal[] = [
     notes: 'Đã hoàn tất thủ tục tiêu hủy định kỳ kết thúc năm học 2025-2026.',
   },
 ];
+
+export const DEFAULT_SANITARY_SETTINGS: SanitaryNapkinSettings = {
+  minAlertThresholdDefault: 40,
+  defaultQuantityPerDispatch: 1,
+  allowAnonymous: true,
+  requireClass: true,
+  enableSoundNotification: true,
+};
+
+export const INITIAL_SANITARY_PRODUCTS: SanitaryNapkinProduct[] = [
+  {
+    id: 'sn-prod-01',
+    name: 'BVS ban ngày siêu mỏng cánh (23cm)',
+    brand: 'Diana Sensi Cool Fresh / Kotex',
+    unit: 'miếng',
+    stockQuantity: 120,
+    minAlertThreshold: 35,
+    notes: 'Loại thông dụng nhất cho học sinh trong các buổi học chính khóa & thể dục.',
+    isActive: true,
+    createdAt: '2026-09-01T08:00:00.000Z',
+  },
+  {
+    id: 'sn-prod-02',
+    name: 'BVS ban đêm siêu thấm chống tràn (28-35cm)',
+    brand: 'Kotex Night / Diana Night',
+    unit: 'miếng',
+    stockQuantity: 45,
+    minAlertThreshold: 20,
+    notes: 'Dùng cho các trường hợp khẩn cấp ra nhiều hoặc học sinh tham gia hoạt động ngoại khóa kéo dài.',
+    isActive: true,
+    createdAt: '2026-09-01T08:00:00.000Z',
+  },
+  {
+    id: 'sn-prod-03',
+    name: 'BVS hàng ngày kháng khuẩn mặt bông (15cm)',
+    brand: 'Diana Daily / Kotex Cool',
+    unit: 'miếng',
+    stockQuantity: 60,
+    minAlertThreshold: 20,
+    notes: 'Dùng đầu/cuối chu kỳ hoặc vệ sinh học đường.',
+    isActive: true,
+    createdAt: '2026-09-01T08:00:00.000Z',
+  },
+  {
+    id: 'sn-prod-04',
+    name: 'BVS Laurier Super Slimguard (Nhật Bản)',
+    brand: 'Laurier (Nhật bản)',
+    unit: 'miếng',
+    stockQuantity: 400,
+    minAlertThreshold: 30,
+    notes: 'Dành cho các em có làn da nhạy cảm hoặc dễ kích ứng.',
+    isActive: true,
+    createdAt: '2026-09-01T08:00:00.000Z',
+  },
+  {
+    id: 'sn-prod-05',
+    name: 'BVS Diana Sensi Cool Fresh 23cm (Nhập kho tài trợ)',
+    brand: 'Diana Sensi',
+    unit: 'miếng',
+    stockQuantity: 80,
+    minAlertThreshold: 20,
+    notes: 'Nhập kho tài trợ 10 gói x 8 miếng quy đổi thành 80 miếng.',
+    isActive: true,
+    createdAt: '2026-11-03T08:00:00.000Z',
+  },
+];
+
+export const INITIAL_SANITARY_IMPORTS: SanitaryNapkinImport[] = [
+  {
+    id: 'sn-imp-01',
+    importCode: 'NK-BVS-2026-0001',
+    importDate: '2026-09-02',
+    importTime: '08:30',
+    productId: 'sn-prod-01',
+    productName: 'BVS ban ngày siêu mỏng cánh (23cm)',
+    packagingType: 'pack',
+    packCount: 10,
+    piecesPerPack: 8,
+    totalPieces: 80,
+    sourceOrSponsor: 'Ngân sách y tế học đường năm học 2026-2027',
+    receiverName: 'Đoàn Thị Minh Trang',
+    notes: 'Nhập đầu năm học phục vụ học sinh nữ toàn trường.',
+    status: 'completed',
+    createdAt: '2026-09-02T08:30:00.000Z',
+  },
+  {
+    id: 'sn-imp-02',
+    importCode: 'NK-BVS-2026-0002',
+    importDate: '2026-09-02',
+    importTime: '08:45',
+    productId: 'sn-prod-02',
+    productName: 'BVS ban đêm siêu thấm chống tràn (28-35cm)',
+    packagingType: 'pack',
+    packCount: 10,
+    piecesPerPack: 4,
+    totalPieces: 40,
+    sourceOrSponsor: 'Hội Cha Mẹ Học Sinh tài trợ',
+    receiverName: 'Đoàn Thị Minh Trang',
+    notes: 'Hội phụ huynh hỗ trợ tủ chăm sóc sức khỏe nữ sinh.',
+    status: 'completed',
+    createdAt: '2026-09-02T08:45:00.000Z',
+  },
+  {
+    id: 'sn-imp-03',
+    importCode: 'NK-BVS-2026-0003',
+    importDate: '2026-09-15',
+    importTime: '09:15',
+    productId: 'sn-prod-01',
+    productName: 'BVS ban ngày siêu mỏng cánh (23cm)',
+    packagingType: 'piece',
+    totalPieces: 20,
+    sourceOrSponsor: 'Chương trình Giáo dục giới tính học đường tài trợ',
+    receiverName: 'Đoàn Thị Minh Trang',
+    notes: 'Bổ sung dự phòng.',
+    status: 'completed',
+    createdAt: '2026-09-15T09:15:00.000Z',
+  },
+];
+
+export const INITIAL_SANITARY_DISPATCHES: SanitaryNapkinDispatch[] = [
+  {
+    id: 'sn-disp-01',
+    dispatchCode: 'CP-BVS-2026-0001',
+    dateTime: '2026-10-05T09:15:00',
+    productId: 'sn-prod-01',
+    productName: 'BVS ban ngày siêu mỏng cánh (23cm)',
+    quantity: 1,
+    className: '8A2',
+    isAnonymous: true,
+    dispenserName: 'Đoàn Thị Minh Trang',
+    notes: 'Cấp đột xuất giờ ra chơi tiết 2.',
+    status: 'completed',
+    createdAt: '2026-10-05T09:15:00.000Z',
+  },
+  {
+    id: 'sn-disp-02',
+    dispatchCode: 'CP-BVS-2026-0002',
+    dateTime: '2026-10-08T14:20:00',
+    productId: 'sn-prod-01',
+    productName: 'BVS ban ngày siêu mỏng cánh (23cm)',
+    quantity: 1,
+    className: '7A1',
+    isAnonymous: true,
+    dispenserName: 'Đoàn Thị Minh Trang',
+    notes: 'Cấp trong giờ học thể dục.',
+    status: 'completed',
+    createdAt: '2026-10-08T14:20:00.000Z',
+  },
+  {
+    id: 'sn-disp-03',
+    dispatchCode: 'CP-BVS-2026-0003',
+    dateTime: '2026-10-12T10:05:00',
+    productId: 'sn-prod-02',
+    productName: 'BVS ban đêm siêu thấm chống tràn (28-35cm)',
+    quantity: 1,
+    className: '9A3',
+    isAnonymous: true,
+    dispenserName: 'Đoàn Thị Minh Trang',
+    notes: 'Học sinh chuẩn bị thi học sinh giỏi.',
+    status: 'completed',
+    createdAt: '2026-10-12T10:05:00.000Z',
+  },
+  {
+    id: 'sn-disp-04',
+    dispatchCode: 'CP-BVS-2026-0004',
+    dateTime: '2026-10-14T15:30:00',
+    productId: 'sn-prod-01',
+    productName: 'BVS ban ngày siêu mỏng cánh (23cm)',
+    quantity: 2,
+    className: '6A4',
+    isAnonymous: true,
+    dispenserName: 'Đoàn Thị Minh Trang',
+    notes: 'Hỗ trợ cấp 2 miếng cho buổi sinh hoạt ngoài trời.',
+    status: 'completed',
+    createdAt: '2026-10-14T15:30:00.000Z',
+  },
+];
+
 
 // Calculation and Helper Functions
 export function normalizeClassName(name: string): string {
@@ -2306,6 +2488,10 @@ class AppDatabase {
   private classes: SchoolClass[] = [];
   private disposals: MedicineDisposal[] = [];
   private staffMembers: SchoolStaff[] = [];
+  private sanitaryProducts: SanitaryNapkinProduct[] = [];
+  private sanitaryDispatches: SanitaryNapkinDispatch[] = [];
+  private sanitaryImports: SanitaryNapkinImport[] = [];
+  private sanitarySettings: SanitaryNapkinSettings = DEFAULT_SANITARY_SETTINGS;
   private listeners: (() => void)[] = [];
 
   // Performance optimizations: memoized computed states
@@ -2336,6 +2522,18 @@ class AppDatabase {
   private serverSyncTimer: any = null;
   private lastServerRevision = 0;
   private isPullingFromServer = false;
+
+  public markInventoryMutation(): number {
+    this.lastInventoryMutationAt = Date.now();
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('thcs_dt_last_inventory_mutation_at', String(this.lastInventoryMutationAt));
+      }
+    } catch {
+      // ignore
+    }
+    return this.lastInventoryMutationAt;
+  }
 
   constructor() {
     this.init();
@@ -2390,6 +2588,7 @@ class AppDatabase {
   private cachedDeletedTxIds: string[] | null = null;
   private cachedDeletedClassIds: string[] | null = null;
   private cachedDeletedUserIds: string[] | null = null;
+  private cachedDeletedCheckIds: string[] | null = null;
 
   private getDeletedVisitIds(): string[] {
     if (this.cachedDeletedVisitIds) return this.cachedDeletedVisitIds;
@@ -2602,6 +2801,110 @@ class AppDatabase {
       const next = this.getDeletedClassIds().filter((x) => !removeSet.has(x));
       this.cachedDeletedClassIds = next;
       localStorage.setItem('thcs_dongthanh_deleted_classes_v1', JSON.stringify(next));
+    } catch {
+      // ignore
+    }
+  }
+
+  private getDeletedCheckIds(): string[] {
+    if (this.cachedDeletedCheckIds) return this.cachedDeletedCheckIds;
+    try {
+      const raw = localStorage.getItem('thcs_dongthanh_deleted_checks_v1');
+      const res = raw ? JSON.parse(raw) : [];
+      this.cachedDeletedCheckIds = Array.isArray(res) ? res : [];
+      return this.cachedDeletedCheckIds;
+    } catch {
+      return [];
+    }
+  }
+
+  private addDeletedCheckId(id: string) {
+    if (!id) return;
+    try {
+      const current = new Set(this.getDeletedCheckIds());
+      current.add(id);
+      const arr = Array.from(current);
+      this.cachedDeletedCheckIds = arr;
+      localStorage.setItem('thcs_dongthanh_deleted_checks_v1', JSON.stringify(arr));
+    } catch {
+      // ignore
+    }
+  }
+
+  private cachedDeletedSanitaryProductIds: string[] | null = null;
+  private cachedDeletedSanitaryDispatchIds: string[] | null = null;
+  private cachedDeletedSanitaryImportIds: string[] | null = null;
+
+  public getDeletedSanitaryProductIds(): string[] {
+    if (this.cachedDeletedSanitaryProductIds) return this.cachedDeletedSanitaryProductIds;
+    try {
+      const raw = localStorage.getItem('thcs_dongthanh_deleted_sanitary_prods_v1');
+      const res = raw ? JSON.parse(raw) : [];
+      this.cachedDeletedSanitaryProductIds = Array.isArray(res) ? res : [];
+      return this.cachedDeletedSanitaryProductIds;
+    } catch {
+      return [];
+    }
+  }
+
+  public addDeletedSanitaryProductId(id: string) {
+    if (!id) return;
+    try {
+      const current = new Set(this.getDeletedSanitaryProductIds());
+      current.add(id);
+      const arr = Array.from(current);
+      this.cachedDeletedSanitaryProductIds = arr;
+      localStorage.setItem('thcs_dongthanh_deleted_sanitary_prods_v1', JSON.stringify(arr));
+    } catch {
+      // ignore
+    }
+  }
+
+  public getDeletedSanitaryDispatchIds(): string[] {
+    if (this.cachedDeletedSanitaryDispatchIds) return this.cachedDeletedSanitaryDispatchIds;
+    try {
+      const raw = localStorage.getItem('thcs_dongthanh_deleted_sanitary_dispatches_v1');
+      const res = raw ? JSON.parse(raw) : [];
+      this.cachedDeletedSanitaryDispatchIds = Array.isArray(res) ? res : [];
+      return this.cachedDeletedSanitaryDispatchIds;
+    } catch {
+      return [];
+    }
+  }
+
+  public addDeletedSanitaryDispatchId(id: string) {
+    if (!id) return;
+    try {
+      const current = new Set(this.getDeletedSanitaryDispatchIds());
+      current.add(id);
+      const arr = Array.from(current);
+      this.cachedDeletedSanitaryDispatchIds = arr;
+      localStorage.setItem('thcs_dongthanh_deleted_sanitary_dispatches_v1', JSON.stringify(arr));
+    } catch {
+      // ignore
+    }
+  }
+
+  public getDeletedSanitaryImportIds(): string[] {
+    if (this.cachedDeletedSanitaryImportIds) return this.cachedDeletedSanitaryImportIds;
+    try {
+      const raw = localStorage.getItem('thcs_dongthanh_deleted_sanitary_imports_v1');
+      const res = raw ? JSON.parse(raw) : [];
+      this.cachedDeletedSanitaryImportIds = Array.isArray(res) ? res : [];
+      return this.cachedDeletedSanitaryImportIds;
+    } catch {
+      return [];
+    }
+  }
+
+  public addDeletedSanitaryImportId(id: string) {
+    if (!id) return;
+    try {
+      const current = new Set(this.getDeletedSanitaryImportIds());
+      current.add(id);
+      const arr = Array.from(current);
+      this.cachedDeletedSanitaryImportIds = arr;
+      localStorage.setItem('thcs_dongthanh_deleted_sanitary_imports_v1', JSON.stringify(arr));
     } catch {
       // ignore
     }
@@ -2984,24 +3287,108 @@ class AppDatabase {
           }
           changed = true;
         }
+        if (Array.isArray(payload.disposals) && payload.disposals.length > 0) {
+          const beforeDispJson = JSON.stringify(this.disposals);
+          this.disposals = this.mergeItemsById(this.disposals, payload.disposals);
+          if (JSON.stringify(this.disposals) !== beforeDispJson) changed = true;
+        }
+        if (Array.isArray(payload.inventoryChecks) && payload.inventoryChecks.length > 0) {
+          const beforeCheckJson = JSON.stringify(this.inventoryChecks);
+          this.inventoryChecks = this.mergeItemsById(this.inventoryChecks, payload.inventoryChecks);
+          if (JSON.stringify(this.inventoryChecks) !== beforeCheckJson) changed = true;
+        }
         if (Array.isArray(payload.users) && payload.users.length > 0) {
           this.users = this.mergeItemsById(this.users, payload.users);
           this.normalizeUsersToTwoRoles();
           changed = true;
         }
+
+        // Merge Sanitary Napkin Products, Dispatches, Imports & Settings
+        const deletedSanitaryProdSet = new Set(this.getDeletedSanitaryProductIds());
+        if (Array.isArray(payload.deletedSanitaryProductIds)) {
+          for (const dId of payload.deletedSanitaryProductIds) {
+            deletedSanitaryProdSet.add(dId);
+            this.addDeletedSanitaryProductId(dId);
+          }
+        }
+        const deletedSanitaryDispSet = new Set(this.getDeletedSanitaryDispatchIds());
+        if (Array.isArray(payload.deletedSanitaryDispatchIds)) {
+          for (const dId of payload.deletedSanitaryDispatchIds) {
+            deletedSanitaryDispSet.add(dId);
+            this.addDeletedSanitaryDispatchId(dId);
+          }
+        }
+        const deletedSanitaryImpSet = new Set(this.getDeletedSanitaryImportIds());
+        if (Array.isArray(payload.deletedSanitaryImportIds)) {
+          for (const dId of payload.deletedSanitaryImportIds) {
+            deletedSanitaryImpSet.add(dId);
+            this.addDeletedSanitaryImportId(dId);
+          }
+        }
+
+        if (Array.isArray(payload.sanitaryProducts) && payload.sanitaryProducts.length > 0) {
+          const beforeProdJson = JSON.stringify(this.sanitaryProducts);
+          this.sanitaryProducts = this.mergeItemsById(this.sanitaryProducts, payload.sanitaryProducts, deletedSanitaryProdSet);
+          if (JSON.stringify(this.sanitaryProducts) !== beforeProdJson) changed = true;
+          try {
+            localStorage.removeItem('thcs_dongthanh_sanitary_products_cleaned_v1');
+          } catch {}
+        } else if (payload.sanitaryProductsCleaned && this.sanitaryProducts.length === 0) {
+          // Keep empty if explicitly cleaned and local is also empty
+        } else if (this.sanitaryProducts.length === 0) {
+          this.sanitaryProducts = [...INITIAL_SANITARY_PRODUCTS];
+          try {
+            localStorage.removeItem('thcs_dongthanh_sanitary_products_cleaned_v1');
+          } catch {}
+          changed = true;
+        } else {
+          try {
+            localStorage.removeItem('thcs_dongthanh_sanitary_products_cleaned_v1');
+          } catch {}
+        }
+
+        if (payload.sanitaryDispatchesCleaned) {
+          if (this.sanitaryDispatches.length > 0) {
+            this.sanitaryDispatches = [];
+            changed = true;
+          }
+        } else if (Array.isArray(payload.sanitaryDispatches) && payload.sanitaryDispatches.length > 0) {
+          const beforeDispJson = JSON.stringify(this.sanitaryDispatches);
+          this.sanitaryDispatches = this.mergeItemsById(this.sanitaryDispatches, payload.sanitaryDispatches, deletedSanitaryDispSet)
+            .map((d) => ({ ...d, isAnonymous: true }));
+          if (JSON.stringify(this.sanitaryDispatches) !== beforeDispJson) changed = true;
+        }
+
+        if (Array.isArray(payload.sanitaryImports) && payload.sanitaryImports.length > 0) {
+          const beforeImpJson = JSON.stringify(this.sanitaryImports);
+          this.sanitaryImports = this.mergeItemsById(this.sanitaryImports, payload.sanitaryImports, deletedSanitaryImpSet);
+          if (JSON.stringify(this.sanitaryImports) !== beforeImpJson) changed = true;
+        }
+
+        if (payload.sanitarySettings && typeof payload.sanitarySettings === 'object') {
+          const beforeSetJson = JSON.stringify(this.sanitarySettings);
+          this.sanitarySettings = { ...this.sanitarySettings, ...payload.sanitarySettings };
+          if (JSON.stringify(this.sanitarySettings) !== beforeSetJson) changed = true;
+        }
+
         if (changed) {
           this.saveAll(false);
           this.setSyncStatus('saved');
           this.notify();
         }
 
-        // If this browser has clinicVisits, transactions, or staff that are not yet in Cloud Firestore, push merged operational state back
+        // If this browser has clinicVisits, transactions, staff, or sanitary dispatches not yet in Cloud Firestore, push merged operational state back
         const incomingStaffIds = new Set((incomingStaff || []).map((s: any) => s?.id));
         const localHasUnsyncedStaff =
           incomingStaff !== null && this.staffMembers.some((s) => s?.id && !incomingStaffIds.has(s.id));
         const localHasUnsyncedVisits = this.clinicVisits.some((v) => v?.id && !incomingVisitIds.has(v.id));
         const localHasUnsyncedTxs = this.transactions.some((t) => t?.id && !incomingTxIds.has(t.id));
-        if (localHasUnsyncedVisits || localHasUnsyncedTxs || localHasUnsyncedStaff) {
+        const incomingDispatchIds = new Set((Array.isArray(payload.sanitaryDispatches) ? payload.sanitaryDispatches : []).map((d: any) => d?.id));
+        const localHasUnsyncedDispatches = this.sanitaryDispatches.some((d) => d?.id && !incomingDispatchIds.has(d.id));
+        const incomingImportIds = new Set((Array.isArray(payload.sanitaryImports) ? payload.sanitaryImports : []).map((i: any) => i?.id));
+        const localHasUnsyncedImports = this.sanitaryImports.some((i) => i?.id && !incomingImportIds.has(i.id));
+
+        if (localHasUnsyncedVisits || localHasUnsyncedTxs || localHasUnsyncedStaff || localHasUnsyncedDispatches || localHasUnsyncedImports) {
           pushSharedOperationalToCloud(
             {
               medicines: this.medicines,
@@ -3013,6 +3400,10 @@ class AppDatabase {
               inventoryChecks: this.inventoryChecks,
               disposals: this.disposals,
               settings: this.settings,
+              sanitaryProducts: this.sanitaryProducts,
+              sanitaryDispatches: this.sanitaryDispatches,
+              sanitaryImports: this.sanitaryImports,
+              sanitarySettings: this.sanitarySettings,
               users: this.users,
               staffMembers: this.staffMembers,
               clinicVisits: this.clinicVisits,
@@ -3024,6 +3415,11 @@ class AppDatabase {
               deletedTxIds: Array.from(deletedTxSet),
               deletedStudentIds: Array.from(deletedStudentSet),
               deletedStaffIds: Array.from(deletedStaffSet),
+              deletedSanitaryProductIds: this.getDeletedSanitaryProductIds(),
+              deletedSanitaryDispatchIds: this.getDeletedSanitaryDispatchIds(),
+              deletedSanitaryImportIds: this.getDeletedSanitaryImportIds(),
+              sanitaryProductsCleaned: localStorage.getItem('thcs_dongthanh_sanitary_products_cleaned_v1') === 'true',
+              sanitaryDispatchesCleaned: localStorage.getItem('thcs_dongthanh_sanitary_dispatches_cleaned_v1') === 'true',
               staffUpdatedAt: this.lastStaffMutationAt || Number(localStorage.getItem('thcs_dt_staff_updated_at') || Date.now()),
               staffCleaned: localStorage.getItem('thcs_dongthanh_staff_cleaned_v1') === 'true',
               deletedUserIds: this.getDeletedUserIds(),
@@ -3289,6 +3685,77 @@ class AppDatabase {
       if (srv.settings && typeof srv.settings === 'object') {
         this.settings = { ...this.settings, ...srv.settings };
       }
+      const deletedSanitaryProductSet = new Set([
+        ...this.getDeletedSanitaryProductIds(),
+        ...(Array.isArray(srv.deletedSanitaryProductIds) ? srv.deletedSanitaryProductIds : []),
+      ]);
+      const deletedSanitaryDispatchSet = new Set([
+        ...this.getDeletedSanitaryDispatchIds(),
+        ...(Array.isArray(srv.deletedSanitaryDispatchIds) ? srv.deletedSanitaryDispatchIds : []),
+      ]);
+      const deletedSanitaryImportSet = new Set([
+        ...this.getDeletedSanitaryImportIds(),
+        ...(Array.isArray(srv.deletedSanitaryImportIds) ? srv.deletedSanitaryImportIds : []),
+      ]);
+
+      this.cachedDeletedSanitaryProductIds = Array.from(deletedSanitaryProductSet);
+      this.cachedDeletedSanitaryDispatchIds = Array.from(deletedSanitaryDispatchSet);
+      this.cachedDeletedSanitaryImportIds = Array.from(deletedSanitaryImportSet);
+      try {
+        localStorage.setItem('thcs_dongthanh_deleted_sanitary_prods_v1', JSON.stringify(this.cachedDeletedSanitaryProductIds));
+        localStorage.setItem('thcs_dongthanh_deleted_sanitary_dispatches_v1', JSON.stringify(this.cachedDeletedSanitaryDispatchIds));
+        localStorage.setItem('thcs_dongthanh_deleted_sanitary_imports_v1', JSON.stringify(this.cachedDeletedSanitaryImportIds));
+      } catch {
+        // ignore
+      }
+
+      const isSanitaryProductsCleaned =
+        Boolean(srv.sanitaryProductsCleaned) ||
+        localStorage.getItem('thcs_dongthanh_sanitary_products_cleaned_v1') === 'true';
+      const isSanitaryDispatchesCleaned =
+        Boolean(srv.sanitaryDispatchesCleaned) ||
+        localStorage.getItem('thcs_dongthanh_sanitary_dispatches_cleaned_v1') === 'true';
+
+      if (Array.isArray(srv.sanitaryProducts) && srv.sanitaryProducts.length > 0) {
+        this.sanitaryProducts = this.mergeItemsById(this.sanitaryProducts, srv.sanitaryProducts, deletedSanitaryProductSet)
+          .filter((p) => p && !deletedSanitaryProductSet.has(p.id));
+        try {
+          localStorage.removeItem('thcs_dongthanh_sanitary_products_cleaned_v1');
+        } catch {}
+      } else if (isSanitaryProductsCleaned && this.sanitaryProducts.length === 0) {
+        this.sanitaryProducts = [];
+      } else if (this.sanitaryProducts.length > 0) {
+        try {
+          localStorage.removeItem('thcs_dongthanh_sanitary_products_cleaned_v1');
+        } catch {}
+      } else {
+        this.sanitaryProducts = [...INITIAL_SANITARY_PRODUCTS];
+        try {
+          localStorage.removeItem('thcs_dongthanh_sanitary_products_cleaned_v1');
+        } catch {}
+      }
+
+      if (isSanitaryDispatchesCleaned) {
+        this.sanitaryDispatches = [];
+      } else if (Array.isArray(srv.sanitaryDispatches)) {
+        this.sanitaryDispatches = this.mergeItemsById(this.sanitaryDispatches, srv.sanitaryDispatches, deletedSanitaryDispatchSet)
+          .filter((d) => d && !deletedSanitaryDispatchSet.has(d.id))
+          .map((d) => ({
+            ...d,
+            isAnonymous: true,
+            studentName: undefined,
+            studentCode: undefined,
+          }));
+      }
+
+      if (Array.isArray(srv.sanitaryImports)) {
+        this.sanitaryImports = this.mergeItemsById(this.sanitaryImports, srv.sanitaryImports, deletedSanitaryImportSet)
+          .filter((i) => i && !deletedSanitaryImportSet.has(i.id));
+      }
+
+      if (srv.sanitarySettings && typeof srv.sanitarySettings === 'object') {
+        this.sanitarySettings = { ...this.sanitarySettings, ...srv.sanitarySettings };
+      }
 
       // 3.1 Staff Members & Teachers (Cán bộ - Giáo viên)
       const localStaffCountBefore = this.staffMembers.length;
@@ -3383,16 +3850,23 @@ class AppDatabase {
         this.staffMembers.length > srvStaffCount ||
         (localStaffTime > srvStaffTime && this.staffMembers.length > 0);
 
+      const srvDispatchCount = Array.isArray(srv.sanitaryDispatches) ? srv.sanitaryDispatches.length : 0;
+      const srvImportCount = Array.isArray(srv.sanitaryImports) ? srv.sanitaryImports.length : 0;
+      const localHasNewerSanitary =
+        this.sanitaryDispatches.length > srvDispatchCount ||
+        this.sanitaryImports.length > srvImportCount;
+
       this.saveAll(false);
       this.setSyncStatus('saved');
       this.notify();
 
-      // If local had records, Homeroom Teachers (GVCN), or Staff that weren't on the server yet, push merged state back to server
+      // If local had records, Homeroom Teachers (GVCN), Staff, or Sanitary data that weren't on the server yet, push merged state back to server
       if (
         pushBackIfLocalNewer &&
         (this.clinicVisits.length > srvVisitCount ||
           this.transactions.length > srvTxCount ||
           this.students.length > srvStuCount ||
+          localHasNewerSanitary ||
           localHasNewerOrRicherClasses ||
           localHasNewerOrRicherStaff)
       ) {
@@ -3445,6 +3919,10 @@ class AppDatabase {
         settings: this.settings,
         users: this.users,
         staffMembers: this.staffMembers,
+        sanitaryProducts: this.sanitaryProducts,
+        sanitaryDispatches: this.sanitaryDispatches,
+        sanitaryImports: this.sanitaryImports,
+        sanitarySettings: this.sanitarySettings,
         students: this.students,
         healthProfiles: nonEmptyProfiles,
         clinicVisits: this.clinicVisits,
@@ -3459,6 +3937,11 @@ class AppDatabase {
         deletedUserIds: this.getDeletedUserIds(),
         deletedClassIds: this.getDeletedClassIds(),
         deletedStaffIds: this.getDeletedStaffIds(),
+        deletedSanitaryProductIds: this.getDeletedSanitaryProductIds(),
+        deletedSanitaryDispatchIds: this.getDeletedSanitaryDispatchIds(),
+        deletedSanitaryImportIds: this.getDeletedSanitaryImportIds(),
+        sanitaryProductsCleaned: localStorage.getItem('thcs_dongthanh_sanitary_products_cleaned_v1') === 'true',
+        sanitaryDispatchesCleaned: localStorage.getItem('thcs_dongthanh_sanitary_dispatches_cleaned_v1') === 'true',
         staffUpdatedAt:
           this.lastStaffMutationAt ||
           Number(localStorage.getItem('thcs_dt_staff_updated_at') || Date.now()),
@@ -3496,6 +3979,10 @@ class AppDatabase {
           inventoryChecks: this.inventoryChecks,
           disposals: this.disposals,
           settings: this.settings,
+          sanitaryProducts: this.sanitaryProducts,
+          sanitaryDispatches: this.sanitaryDispatches,
+          sanitaryImports: this.sanitaryImports,
+          sanitarySettings: this.sanitarySettings,
           users: this.users,
           staffMembers: this.staffMembers,
           clinicVisits: this.clinicVisits,
@@ -3509,6 +3996,11 @@ class AppDatabase {
           deletedUserIds: payload.deletedUserIds,
           deletedClassIds: payload.deletedClassIds,
           deletedStaffIds: payload.deletedStaffIds,
+          deletedSanitaryProductIds: payload.deletedSanitaryProductIds,
+          deletedSanitaryDispatchIds: payload.deletedSanitaryDispatchIds,
+          deletedSanitaryImportIds: payload.deletedSanitaryImportIds,
+          sanitaryProductsCleaned: payload.sanitaryProductsCleaned,
+          sanitaryDispatchesCleaned: payload.sanitaryDispatchesCleaned,
           staffUpdatedAt: payload.staffUpdatedAt,
           staffCleaned: payload.staffCleaned,
           inventoryUpdatedAt: payload.inventoryUpdatedAt,
@@ -3533,7 +4025,7 @@ class AppDatabase {
 
       const res = await fetch('/api/school-state', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: this.getAuthHeaders(),
         body: JSON.stringify(payload),
       });
       if (res.ok) {
@@ -3575,6 +4067,10 @@ class AppDatabase {
           inventoryChecks: this.inventoryChecks,
           disposals: this.disposals,
           settings: this.settings,
+          sanitaryProducts: this.sanitaryProducts,
+          sanitaryDispatches: this.sanitaryDispatches,
+          sanitaryImports: this.sanitaryImports,
+          sanitarySettings: this.sanitarySettings,
           users: this.users,
           staffMembers: this.staffMembers,
           clinicVisits: this.clinicVisits,
@@ -3588,6 +4084,11 @@ class AppDatabase {
           deletedUserIds: this.getDeletedUserIds(),
           deletedClassIds: this.getDeletedClassIds(),
           deletedStaffIds: this.getDeletedStaffIds(),
+          deletedSanitaryProductIds: this.getDeletedSanitaryProductIds(),
+          deletedSanitaryDispatchIds: this.getDeletedSanitaryDispatchIds(),
+          deletedSanitaryImportIds: this.getDeletedSanitaryImportIds(),
+          sanitaryProductsCleaned: localStorage.getItem('thcs_dongthanh_sanitary_products_cleaned_v1') === 'true',
+          sanitaryDispatchesCleaned: localStorage.getItem('thcs_dongthanh_sanitary_dispatches_cleaned_v1') === 'true',
           staffUpdatedAt:
             this.lastStaffMutationAt ||
             Number(localStorage.getItem('thcs_dt_staff_updated_at') || Date.now()),
@@ -3605,7 +4106,7 @@ class AppDatabase {
 
       const res = await fetch('/api/clinic-visit', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: this.getAuthHeaders(),
         body: JSON.stringify({
           action,
           visit,
@@ -4015,9 +4516,16 @@ class AppDatabase {
         healthCheckups: this.healthCheckups,
         users: this.users,
         staffMembers: this.staffMembers,
+        sanitaryProducts: this.sanitaryProducts,
+        sanitaryDispatches: this.sanitaryDispatches,
+        sanitaryImports: this.sanitaryImports,
+        sanitarySettings: this.sanitarySettings,
         settings: this.settings,
         deletedVisitIds: this.getDeletedVisitIds(),
         deletedUserIds: this.getDeletedUserIds(),
+        deletedSanitaryProductIds: this.getDeletedSanitaryProductIds(),
+        deletedSanitaryDispatchIds: this.getDeletedSanitaryDispatchIds(),
+        deletedSanitaryImportIds: this.getDeletedSanitaryImportIds(),
         inventoryUpdatedAt: this.lastInventoryMutationAt || Date.now(),
         updatedAt: new Date().toISOString(),
       });
@@ -4509,6 +5017,10 @@ class AppDatabase {
       const storedClasses = localStorage.getItem(STORAGE_KEYS.SCHOOL_CLASSES);
       const storedDisposals = localStorage.getItem(STORAGE_KEYS.DISPOSALS);
       const storedStaff = localStorage.getItem(STORAGE_KEYS.STAFF_MEMBERS);
+      const storedSanitaryProducts = localStorage.getItem(STORAGE_KEYS.SANITARY_PRODUCTS);
+      const storedSanitaryDispatches = localStorage.getItem(STORAGE_KEYS.SANITARY_DISPATCHES);
+      const storedSanitaryImports = localStorage.getItem(STORAGE_KEYS.SANITARY_IMPORTS);
+      const storedSanitarySettings = localStorage.getItem(STORAGE_KEYS.SANITARY_SETTINGS);
 
       const isInitialized = localStorage.getItem(STORAGE_KEYS.INITIALIZED_FLAG);
       const storedCatalogVer = localStorage.getItem('thcs_dt_fixed_catalog_version');
@@ -4551,6 +5063,39 @@ class AppDatabase {
         this.classes = safeParse(storedClasses, isStudentsCleaned ? [] : [...DEFAULT_CLASSES]);
         const isStaffCleaned = localStorage.getItem('thcs_dongthanh_staff_cleaned_v1') === 'true';
         this.staffMembers = safeParse(storedStaff, isStaffCleaned ? [] : [...INITIAL_STAFF_MEMBERS]);
+        const isSanitaryProductsCleaned = localStorage.getItem('thcs_dongthanh_sanitary_products_cleaned_v1') === 'true';
+        const isSanitaryDispatchesCleaned = localStorage.getItem('thcs_dongthanh_sanitary_dispatches_cleaned_v1') === 'true';
+        const deletedSanitaryProdSet = new Set(this.getDeletedSanitaryProductIds());
+        const deletedSanitaryDispSet = new Set(this.getDeletedSanitaryDispatchIds());
+        const deletedSanitaryImpSet = new Set(this.getDeletedSanitaryImportIds());
+
+        const parsedProds = safeParse(storedSanitaryProducts, []);
+        if (Array.isArray(parsedProds) && parsedProds.length > 0) {
+          this.sanitaryProducts = parsedProds.filter((p: SanitaryNapkinProduct) => p && !deletedSanitaryProdSet.has(p.id));
+        } else if (isSanitaryProductsCleaned) {
+          this.sanitaryProducts = [];
+        } else {
+          this.sanitaryProducts = [...INITIAL_SANITARY_PRODUCTS];
+        }
+        if (this.sanitaryProducts.length === 0 && !isSanitaryProductsCleaned) {
+          this.sanitaryProducts = [...INITIAL_SANITARY_PRODUCTS];
+        }
+
+        this.sanitaryDispatches = isSanitaryDispatchesCleaned
+          ? []
+          : safeParse<SanitaryNapkinDispatch[]>(storedSanitaryDispatches, [...INITIAL_SANITARY_DISPATCHES])
+              .filter((d) => d && !deletedSanitaryDispSet.has(d.id))
+              .map((d) => ({
+                ...d,
+                isAnonymous: true,
+                studentName: undefined,
+                studentCode: undefined,
+              }));
+
+        this.sanitaryImports = safeParse(storedSanitaryImports, [...INITIAL_SANITARY_IMPORTS])
+          .filter((i: SanitaryNapkinImport) => i && !deletedSanitaryImpSet.has(i.id));
+
+        this.sanitarySettings = safeParse(storedSanitarySettings, { ...DEFAULT_SANITARY_SETTINGS });
         if (!this.isOnlyDemoSchoolClasses(this.classes)) {
           this.classes = this.classes.map((c) => {
             const cleanUpdatedAt = c.updatedAt === '2026-09-15T08:00:00.000Z' ? undefined : c.updatedAt;
@@ -4701,6 +5246,41 @@ class AppDatabase {
                 changed = true;
               }
             }
+            if (Array.isArray(opBundle.sanitaryProducts) && opBundle.sanitaryProducts.length > 0) {
+              const deletedProdSet = new Set(this.getDeletedSanitaryProductIds());
+              const beforeProdJson = JSON.stringify(this.sanitaryProducts);
+              const mergedProds = this.mergeItemsById(this.sanitaryProducts, opBundle.sanitaryProducts, deletedProdSet);
+              if (JSON.stringify(mergedProds) !== beforeProdJson) {
+                this.sanitaryProducts = mergedProds;
+                this.safeSetLocalStorage(STORAGE_KEYS.SANITARY_PRODUCTS, JSON.stringify(this.sanitaryProducts));
+                changed = true;
+              }
+            }
+            if (Array.isArray(opBundle.sanitaryDispatches) && opBundle.sanitaryDispatches.length > 0) {
+              const deletedDispSet = new Set(this.getDeletedSanitaryDispatchIds());
+              const beforeDispJson = JSON.stringify(this.sanitaryDispatches);
+              const mergedDisps = this.mergeItemsById(this.sanitaryDispatches, opBundle.sanitaryDispatches, deletedDispSet)
+                .map((d) => ({ ...d, isAnonymous: true }));
+              if (JSON.stringify(mergedDisps) !== beforeDispJson) {
+                this.sanitaryDispatches = mergedDisps;
+                this.safeSetLocalStorage(STORAGE_KEYS.SANITARY_DISPATCHES, JSON.stringify(this.sanitaryDispatches));
+                changed = true;
+              }
+            }
+            if (Array.isArray(opBundle.sanitaryImports) && opBundle.sanitaryImports.length > 0) {
+              const deletedImpSet = new Set(this.getDeletedSanitaryImportIds());
+              const beforeImpJson = JSON.stringify(this.sanitaryImports);
+              const mergedImps = this.mergeItemsById(this.sanitaryImports, opBundle.sanitaryImports, deletedImpSet);
+              if (JSON.stringify(mergedImps) !== beforeImpJson) {
+                this.sanitaryImports = mergedImps;
+                this.safeSetLocalStorage(STORAGE_KEYS.SANITARY_IMPORTS, JSON.stringify(this.sanitaryImports));
+                changed = true;
+              }
+            }
+            if (opBundle.sanitarySettings && typeof opBundle.sanitarySettings === 'object') {
+              this.sanitarySettings = { ...this.sanitarySettings, ...opBundle.sanitarySettings };
+              this.safeSetLocalStorage(STORAGE_KEYS.SANITARY_SETTINGS, JSON.stringify(this.sanitarySettings));
+            }
             if (changed) {
               this.scheduleServerPush();
               this.notify();
@@ -4846,6 +5426,10 @@ class AppDatabase {
     this.healthCheckups = [...INITIAL_HEALTH_CHECKUPS];
     this.classes = [...DEFAULT_CLASSES];
     this.staffMembers = [...INITIAL_STAFF_MEMBERS];
+    this.sanitaryProducts = [...INITIAL_SANITARY_PRODUCTS];
+    this.sanitaryDispatches = [...INITIAL_SANITARY_DISPATCHES];
+    this.sanitaryImports = [...INITIAL_SANITARY_IMPORTS];
+    this.sanitarySettings = { ...DEFAULT_SANITARY_SETTINGS };
     this.saveAll();
     this.notify();
   }
@@ -4862,6 +5446,10 @@ class AppDatabase {
       this.safeSetLocalStorage(STORAGE_KEYS.MEDICINES, JSON.stringify(this.medicines));
       this.safeSetLocalStorage(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(this.transactions));
       this.safeSetLocalStorage(STORAGE_KEYS.STAFF_MEMBERS, JSON.stringify(this.staffMembers));
+      this.safeSetLocalStorage(STORAGE_KEYS.SANITARY_PRODUCTS, JSON.stringify(this.sanitaryProducts));
+      this.safeSetLocalStorage(STORAGE_KEYS.SANITARY_DISPATCHES, JSON.stringify(this.sanitaryDispatches));
+      this.safeSetLocalStorage(STORAGE_KEYS.SANITARY_IMPORTS, JSON.stringify(this.sanitaryImports));
+      this.safeSetLocalStorage(STORAGE_KEYS.SANITARY_SETTINGS, JSON.stringify(this.sanitarySettings));
       this.safeSetLocalStorage(STORAGE_KEYS.USERS, JSON.stringify(this.users));
       this.safeSetLocalStorage(STORAGE_KEYS.CURRENT_USER, JSON.stringify(this.currentUser));
       this.safeSetLocalStorage(STORAGE_KEYS.SUPPLIES, JSON.stringify(this.supplies));
@@ -4949,106 +5537,108 @@ class AppDatabase {
     }
   }
 
-  // --- Users & Roles (Strictly 2 Task Roles: Quản trị & Nhân viên Y tế, NO individual personnel) ---
+  public getAuthToken(): string | null {
+    if (typeof window === 'undefined') return null;
+    try {
+      return localStorage.getItem('thcs_dt_auth_token');
+    } catch {
+      return null;
+    }
+  }
+
+  public setAuthToken(token: string | null): void {
+    if (typeof window === 'undefined') return;
+    try {
+      if (token) {
+        localStorage.setItem('thcs_dt_auth_token', token);
+      } else {
+        localStorage.removeItem('thcs_dt_auth_token');
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  public getAuthHeaders(): Record<string, string> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const token = this.getAuthToken();
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    return headers;
+  }
+
+  // --- Individual Member Accounts & Role-Based Permissions ---
   public normalizeUsersToTwoRoles(): void {
-    const existingAdmin = this.users?.find((u) => u && (u.id === 'role-admin' || u.role === 'admin'));
-    const existingMedic = this.users?.find((u) => u && (u.id === 'role-medic' || u.role === 'medic'));
+    if (!Array.isArray(this.users) || this.users.length === 0) {
+      this.users = DEFAULT_USERS.map((u) => ({
+        ...u,
+        permissions: { ...DEFAULT_ROLE_PERMISSIONS[u.role] },
+      }));
+    } else {
+      const seenIds = new Set<string>();
+      const cleaned: User[] = [];
+      for (const u of this.users) {
+        if (!u || !u.id || seenIds.has(u.id)) continue;
+        seenIds.add(u.id);
+        const role: UserRole = u.role === 'admin' ? 'admin' : u.role === 'bgh' ? 'bgh' : 'medic';
+        const basePerms = DEFAULT_ROLE_PERMISSIONS[role === 'bgh' ? 'admin' : role];
+        cleaned.push({
+          ...u,
+          role,
+          status: u.status || 'active',
+          permissions: {
+            ...basePerms,
+            ...(u.permissions || {}),
+          },
+        });
+      }
+      this.users = cleaned.length > 0 ? cleaned : [...DEFAULT_USERS];
+    }
 
-    const adminPerms: UserPermission = existingAdmin?.permissions
-      ? {
-          ...DEFAULT_ROLE_PERMISSIONS.admin,
-          ...existingAdmin.permissions,
-          canManageSettings: true,
-          canApproveAudits: true,
-        }
-      : { ...DEFAULT_ROLE_PERMISSIONS.admin };
-
-    const medicPerms: UserPermission = existingMedic?.permissions
-      ? {
-          ...DEFAULT_ROLE_PERMISSIONS.medic,
-          ...existingMedic.permissions,
-        }
-      : { ...DEFAULT_ROLE_PERMISSIONS.medic };
-
-    const adminRoleUser: User = {
-      id: 'role-admin',
-      username: 'quantri',
-      fullName: 'Quản trị',
-      role: 'admin',
-      email: '',
-      phone: '',
-      title: 'Nhiệm vụ Quản trị hệ thống',
-      department: 'Quản trị & Phê duyệt hệ thống',
-      status: 'active',
-      permissions: adminPerms,
-      createdAt: '2026-01-01T08:00:00.000Z',
-      updatedAt: existingAdmin?.updatedAt || new Date().toISOString(),
-    };
-
-    const medicRoleUser: User = {
-      id: 'role-medic',
-      username: 'nhanvien_yte',
-      fullName: 'Nhân viên Y tế',
-      role: 'medic',
-      email: '',
-      phone: '',
-      title: 'Nhiệm vụ Nhân viên Y tế',
-      department: 'Phòng Y tế Học đường',
-      status: 'active',
-      permissions: medicPerms,
-      createdAt: '2026-01-01T08:00:00.000Z',
-      updatedAt: existingMedic?.updatedAt || new Date().toISOString(),
-    };
-
-    this.users = [adminRoleUser, medicRoleUser];
-
-    const currentRole: UserRole =
-      this.currentUser?.role === 'admin' || this.currentUser?.role === 'bgh' ? 'admin' : 'medic';
-    this.currentUser = currentRole === 'admin' ? { ...adminRoleUser } : { ...medicRoleUser };
+    if (this.currentUser) {
+      const matched = this.users.find(
+        (u) =>
+          u.id === this.currentUser.id ||
+          (this.currentUser.username && u.username.toLowerCase() === this.currentUser.username.toLowerCase()) ||
+          (this.currentUser.email && u.email && u.email.toLowerCase() === this.currentUser.email.toLowerCase())
+      );
+      if (matched) {
+        this.currentUser = {
+          ...this.currentUser,
+          ...matched,
+        };
+      }
+    } else {
+      this.currentUser = { ...this.users[0] };
+    }
   }
 
   public clearAllPersonnelKeepTwoRoles(): User[] {
-    this.users = DEFAULT_USERS.map((u) => ({
-      ...u,
-      permissions: { ...DEFAULT_ROLE_PERMISSIONS[u.role] },
-      updatedAt: new Date().toISOString(),
-    }));
-    const currentRole: UserRole =
-      this.currentUser?.role === 'admin' || this.currentUser?.role === 'bgh' ? 'admin' : 'medic';
-    this.currentUser =
-      currentRole === 'admin' ? { ...this.users[0] } : { ...this.users[1] };
-    this.safeSetLocalStorage(STORAGE_KEYS.USERS, JSON.stringify(this.users));
-    this.safeSetLocalStorage(STORAGE_KEYS.CURRENT_USER, JSON.stringify(this.currentUser));
-    this.logAudit(
-      'Chuẩn hóa phân quyền 2 nhiệm vụ',
-      'Đã xóa toàn bộ nhân sự cá nhân, chỉ giữ lại 2 nhiệm vụ chuẩn: Quản trị & Nhân viên Y tế'
-    );
+    this.normalizeUsersToTwoRoles();
     this.saveAll();
     this.notify();
     return [...this.users];
   }
 
   public getCurrentUser(): User {
-    if (!this.currentUser || (this.currentUser.id !== 'role-admin' && this.currentUser.id !== 'role-medic')) {
+    if (!this.currentUser) {
       this.normalizeUsersToTwoRoles();
     }
-    const role: UserRole =
-      this.currentUser?.role === 'admin' || this.currentUser?.role === 'bgh' ? 'admin' : 'medic';
-    const matched = this.users?.find((u) => u.role === role);
+    const matched = this.users?.find((u) => u.id === this.currentUser?.id);
     if (matched) {
-      this.currentUser = matched;
+      this.currentUser = { ...this.currentUser, ...matched };
     }
     return this.currentUser;
   }
 
   public getCurrentRolePermissions(): UserPermission {
     const user = this.getCurrentUser();
-    const role: UserRole = user?.role === 'admin' || user?.role === 'bgh' ? 'admin' : 'medic';
-    const roleProfile = this.users?.find((u) => u.role === role);
-    const basePerms = DEFAULT_ROLE_PERMISSIONS[role];
+    const roleKey = user?.role === 'admin' || user?.role === 'bgh' ? 'admin' : 'medic';
+    const basePerms = DEFAULT_ROLE_PERMISSIONS[roleKey];
     return {
       ...basePerms,
-      ...(roleProfile?.permissions || user?.permissions || {}),
+      ...(user?.permissions || {}),
     };
   }
 
@@ -5059,17 +5649,18 @@ class AppDatabase {
       | 'canManageUsersAndRoles'
   ): boolean {
     const user = this.getCurrentUser();
-    const isAdmin = user?.role === 'admin' || user?.role === 'bgh';
-
-    // Bảo mật & Phân quyền (canManageUsersAndRoles) chỉ dành riêng cho Quản trị (admin), Nhân viên Y tế không được phép xem
-    if (permKey === 'canManageUsersAndRoles') {
-      return isAdmin;
+    if (user?.status === 'inactive' || user?.status === 'locked') {
+      return false;
     }
-
+    const isAdmin = user?.role === 'admin' || user?.role === 'bgh';
     const perms = this.getCurrentRolePermissions();
 
+    if (permKey === 'canManageUsersAndRoles') {
+      return isAdmin || Boolean(perms.canManageSettings);
+    }
+
     if (permKey === 'canApproveInventoryAdjustment' || permKey === 'canApproveAudits') {
-      return Boolean(perms.canApproveAudits);
+      return Boolean(perms.canApproveAudits || perms.canManageMedicine || isAdmin);
     }
 
     return Boolean(perms[permKey as keyof UserPermission]);
@@ -5077,6 +5668,9 @@ class AppDatabase {
 
   public canAccessTab(tab: string): boolean {
     const user = this.getCurrentUser();
+    if (user?.status === 'inactive' || user?.status === 'locked') {
+      return false;
+    }
     const isAdmin = user?.role === 'admin' || user?.role === 'bgh';
 
     switch (tab) {
@@ -5125,13 +5719,17 @@ class AppDatabase {
       case 'print_templates':
         return this.hasPermission('canViewReports');
 
-      // 7. Bảo mật & Phân quyền: Độc quyền Quản trị (Nhân viên Y tế tuyệt đối không thấy mục này)
+      // 7. Bảo mật, Tài khoản & Phân quyền
       case 'audit_logs':
-        return isAdmin;
+        return isAdmin || this.hasPermission('canManageSettings');
 
       // 8. Cài đặt & Sao lưu dữ liệu
       case 'settings':
         return this.hasPermission('canManageSettings');
+
+      // 9. Cấp phát băng vệ sinh (Đã gỡ bỏ theo yêu cầu người dùng)
+      case 'sanitary_napkins':
+        return false;
 
       default:
         return true;
@@ -5158,28 +5756,48 @@ class AppDatabase {
   }
 
   public setCurrentUser(user: User) {
-    const targetRole: UserRole =
-      user?.role === 'admin' || user?.role === 'bgh' ? 'admin' : 'medic';
-    this.setCurrentUserRole(targetRole);
+    if (!user) return;
+    const role: UserRole = user.role === 'admin' ? 'admin' : user.role === 'bgh' ? 'bgh' : 'medic';
+    const basePerms = DEFAULT_ROLE_PERMISSIONS[role === 'bgh' ? 'admin' : role];
+    const normalizedUser: User = {
+      ...user,
+      role,
+      status: user.status || 'active',
+      permissions: {
+        ...basePerms,
+        ...(user.permissions || {}),
+      },
+      updatedAt: user.updatedAt || new Date().toISOString(),
+    };
+
+    const idx = this.users.findIndex((u) => u.id === normalizedUser.id);
+    if (idx !== -1) {
+      this.users[idx] = { ...this.users[idx], ...normalizedUser };
+    } else {
+      this.users.push(normalizedUser);
+    }
+
+    this.currentUser = normalizedUser;
+    this.safeSetLocalStorage(STORAGE_KEYS.CURRENT_USER, JSON.stringify(this.currentUser));
+    this.safeSetLocalStorage(STORAGE_KEYS.USERS, JSON.stringify(this.users));
+    this.notify();
   }
 
   public setCurrentUserRole(role: UserRole) {
-    const normalizedRole: UserRole = role === 'admin' || role === 'bgh' ? 'admin' : 'medic';
-    this.normalizeUsersToTwoRoles();
-
-    const matchedRoleProfile =
-      this.users.find((u) => u.role === normalizedRole) ||
-      (normalizedRole === 'admin' ? DEFAULT_USERS[0] : DEFAULT_USERS[1]);
+    const normalizedRole: UserRole = role === 'admin' ? 'admin' : role === 'bgh' ? 'bgh' : 'medic';
+    const matchedProfile =
+      this.users.find((u) => u.role === normalizedRole && u.status === 'active') ||
+      (normalizedRole === 'admin' || normalizedRole === 'bgh' ? DEFAULT_USERS[0] : DEFAULT_USERS[1]);
 
     this.currentUser = {
-      ...matchedRoleProfile,
+      ...matchedProfile,
       updatedAt: new Date().toISOString(),
     };
 
-    localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(this.currentUser));
+    this.safeSetLocalStorage(STORAGE_KEYS.CURRENT_USER, JSON.stringify(this.currentUser));
     this.logAudit(
-      'Chuyển nhiệm vụ làm việc',
-      `Chuyển sang nhiệm vụ: ${getRoleLabel(normalizedRole)}`
+      'Chuyển vai trò làm việc',
+      `Chuyển sang vai trò: ${getRoleLabel(normalizedRole)}`
     );
     this.saveAll();
     this.notify();
@@ -5195,15 +5813,23 @@ class AppDatabase {
   }
 
   public getUsers(): User[] {
-    if (
-      !this.users ||
-      this.users.length !== 2 ||
-      this.users[0]?.id !== 'role-admin' ||
-      this.users[1]?.id !== 'role-medic'
-    ) {
-      this.normalizeUsersToTwoRoles();
-    }
+    this.normalizeUsersToTwoRoles();
     return [...this.users];
+  }
+
+  public setUsersList(users: User[]) {
+    if (!Array.isArray(users)) return;
+    this.users = users;
+    this.normalizeUsersToTwoRoles();
+    this.safeSetLocalStorage(STORAGE_KEYS.USERS, JSON.stringify(this.users));
+    if (this.currentUser) {
+      const updatedCurrent = this.users.find((u) => u.id === this.currentUser.id);
+      if (updatedCurrent) {
+        this.currentUser = { ...updatedCurrent };
+        this.safeSetLocalStorage(STORAGE_KEYS.CURRENT_USER, JSON.stringify(this.currentUser));
+      }
+    }
+    this.notify();
   }
 
   public getUserById(id: string): User | undefined {
@@ -5212,46 +5838,67 @@ class AppDatabase {
   }
 
   public addUser(userData: Omit<User, 'id'> & { id?: string }): User {
-    const targetRole: UserRole =
-      userData.role === 'admin' || userData.role === 'bgh' ? 'admin' : 'medic';
-    this.normalizeUsersToTwoRoles();
-    return this.users.find((u) => u.role === targetRole) || this.users[1];
+    const role: UserRole =
+      userData.role === 'admin' ? 'admin' : userData.role === 'bgh' ? 'bgh' : 'medic';
+    const basePerms = DEFAULT_ROLE_PERMISSIONS[role === 'bgh' ? 'admin' : role];
+    const newUser: User = {
+      ...userData,
+      id: userData.id || 'usr-' + Date.now(),
+      role,
+      status: userData.status || 'active',
+      permissions: {
+        ...basePerms,
+        ...(userData.permissions || {}),
+      },
+      createdAt: userData.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    const existingIdx = this.users.findIndex(
+      (u) => u.id === newUser.id || u.username.toLowerCase() === newUser.username.toLowerCase()
+    );
+    if (existingIdx !== -1) {
+      this.users[existingIdx] = { ...this.users[existingIdx], ...newUser };
+    } else {
+      this.users.push(newUser);
+    }
+    this.saveAll();
+    this.notify();
+    return newUser;
   }
 
   public updateUser(id: string, updates: Partial<User>): User {
     this.normalizeUsersToTwoRoles();
-    let index = this.users.findIndex((u) => u.id === id || u.role === updates.role);
+    const index = this.users.findIndex((u) => u.id === id);
     if (index === -1) {
-      index = 0;
+      return this.currentUser;
     }
     const current = this.users[index];
-    const newRole: UserRole = current.role === 'admin' ? 'admin' : 'medic';
-    const updatedPermissions = updates.permissions || current.permissions || {
-      ...DEFAULT_ROLE_PERMISSIONS[newRole],
+    const nextRole: UserRole = updates.role || current.role;
+    const basePerms = DEFAULT_ROLE_PERMISSIONS[nextRole === 'bgh' ? 'admin' : nextRole];
+    const updatedPermissions: UserPermission = {
+      ...basePerms,
+      ...(current.permissions || {}),
+      ...(updates.permissions || {}),
     };
 
     const updatedUser: User = {
       ...current,
-      role: newRole,
-      fullName: newRole === 'admin' ? 'Quản trị' : 'Nhân viên Y tế',
-      username: newRole === 'admin' ? 'quantri' : 'nhanvien_yte',
-      title: newRole === 'admin' ? 'Nhiệm vụ Quản trị hệ thống' : 'Nhiệm vụ Nhân viên Y tế',
-      department: newRole === 'admin' ? 'Quản trị & Phê duyệt hệ thống' : 'Phòng Y tế Học đường',
-      status: 'active',
+      ...updates,
+      role: nextRole,
       permissions: updatedPermissions,
       updatedAt: new Date().toISOString(),
     };
 
     this.users[index] = updatedUser;
 
-    if (this.currentUser.role === newRole) {
+    if (this.currentUser?.id === updatedUser.id) {
       this.currentUser = { ...updatedUser };
-      localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(this.currentUser));
+      this.safeSetLocalStorage(STORAGE_KEYS.CURRENT_USER, JSON.stringify(this.currentUser));
     }
 
     this.logAudit(
-      'Cập nhật phân quyền nhiệm vụ',
-      `Cập nhật quyền cho nhiệm vụ: ${getRoleLabel(newRole)}`,
+      'Cập nhật tài khoản & phân quyền',
+      `Cập nhật tài khoản: ${updatedUser.fullName} (${updatedUser.username})`,
       updatedUser.id
     );
     this.saveAll();
@@ -5262,8 +5909,9 @@ class AppDatabase {
   public toggleUserPermission(userId: string, permKey: keyof UserPermission): User {
     this.normalizeUsersToTwoRoles();
     const target = this.users.find((u) => u.id === userId) || this.currentUser;
+    const roleKey = target.role === 'admin' || target.role === 'bgh' ? 'admin' : 'medic';
     const basePerms: UserPermission = target.permissions || {
-      ...DEFAULT_ROLE_PERMISSIONS[target.role],
+      ...DEFAULT_ROLE_PERMISSIONS[roleKey],
     };
     const nextVal = !basePerms[permKey];
     const updatedPerms: UserPermission = {
@@ -5304,9 +5952,10 @@ class AppDatabase {
   public resetUserRolePermissions(userId: string): User {
     this.normalizeUsersToTwoRoles();
     const target = this.users.find((u) => u.id === userId);
-    if (!target) throw new Error('Không tìm thấy nhiệm vụ');
+    if (!target) throw new Error('Không tìm thấy tài khoản');
+    const roleKey = target.role === 'admin' || target.role === 'bgh' ? 'admin' : 'medic';
     const defaultPerms: UserPermission = {
-      ...DEFAULT_ROLE_PERMISSIONS[target.role],
+      ...DEFAULT_ROLE_PERMISSIONS[roleKey],
     };
     return this.updateUser(userId, { permissions: defaultPerms });
   }
@@ -5316,7 +5965,8 @@ class AppDatabase {
     const targetRole: UserRole = role === 'admin' || role === 'bgh' ? 'admin' : 'medic';
     let count = 0;
     this.users = this.users.map((u) => {
-      if (u.role !== targetRole) return u;
+      const uRoleKey = u.role === 'admin' || u.role === 'bgh' ? 'admin' : 'medic';
+      if (uRoleKey !== targetRole) return u;
       count++;
       const currentPerms = u.permissions || { ...DEFAULT_ROLE_PERMISSIONS[targetRole] };
       const updatedUser: User = {
@@ -5327,16 +5977,16 @@ class AppDatabase {
         },
         updatedAt: new Date().toISOString(),
       };
-      if (this.currentUser.role === targetRole) {
+      if (this.currentUser?.id === u.id) {
         this.currentUser = { ...updatedUser };
-        localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(this.currentUser));
+        this.safeSetLocalStorage(STORAGE_KEYS.CURRENT_USER, JSON.stringify(this.currentUser));
       }
       return updatedUser;
     });
 
     this.logAudit(
-      'Cập nhật phân quyền nhiệm vụ',
-      `${value ? 'Cấp' : 'Thu hồi'} quyền "${permKey}" cho nhiệm vụ ${getRoleLabel(targetRole)}`
+      'Cập nhật phân quyền nhóm vai trò',
+      `${value ? 'Cấp' : 'Thu hồi'} quyền "${permKey}" cho nhóm ${getRoleLabel(targetRole)}`
     );
     this.saveAll();
     this.notify();
@@ -5345,15 +5995,23 @@ class AppDatabase {
 
   public toggleUserStatus(id: string): User {
     this.normalizeUsersToTwoRoles();
-    return this.users.find((u) => u.id === id) || this.users[0];
+    const target = this.users.find((u) => u.id === id);
+    if (!target) return this.currentUser;
+    const nextStatus = target.status === 'active' ? 'inactive' : 'active';
+    return this.updateUser(id, { status: nextStatus });
   }
 
-  public deleteUser(_id: string): boolean {
-    this.clearAllPersonnelKeepTwoRoles();
+  public deleteUser(id: string): boolean {
+    this.users = this.users.filter((u) => u.id !== id);
+    this.saveAll();
+    this.notify();
     return true;
   }
 
-  public syncUsers(_externalUsers: User[]) {
+  public syncUsers(externalUsers: User[]) {
+    if (Array.isArray(externalUsers) && externalUsers.length > 0) {
+      this.users = externalUsers;
+    }
     this.normalizeUsersToTwoRoles();
     this.saveAll();
     this.notify();
@@ -5913,6 +6571,13 @@ class AppDatabase {
           }
         }
       }
+      const affectedMedIds = new Set(tx.items.map((it) => it.medicineId));
+      for (const medId of affectedMedIds) {
+        this.syncMedicine(medId);
+        const med = this.medicines.find((m) => m.id === medId);
+        if (med) writes.push({ subcollection: 'medicines', docId: med.id, data: med, op: 'set' });
+      }
+      this.markInventoryMutation();
     }
 
     this.transactions.splice(txIndex, 1);
@@ -5929,6 +6594,10 @@ class AppDatabase {
     const idx = this.inventoryChecks.findIndex((c) => c.id === id);
     if (idx === -1) throw new Error('Không tìm thấy đợt kiểm kê cần xóa.');
     const check = this.inventoryChecks[idx];
+    this.addDeletedCheckId(id);
+    if (check.checkCode) {
+      this.addDeletedCheckId(check.checkCode);
+    }
     this.inventoryChecks.splice(idx, 1);
     this.logAudit('Xóa đợt kiểm kê', `Xóa phiếu kiểm kê ${check.checkCode}`, id);
     this.saveAll();
@@ -6139,6 +6808,7 @@ class AppDatabase {
     );
 
     this.syncMedicine(current.medicineId);
+    this.markInventoryMutation();
     this.saveAll();
     this.notify();
 
@@ -6615,6 +7285,13 @@ class AppDatabase {
       tx.id
     );
 
+    // Re-sync each affected medicine
+    const affectedMedIds = new Set(tx.items.map((it) => it.medicineId));
+    for (const medId of affectedMedIds) {
+      this.syncMedicine(medId);
+    }
+
+    this.markInventoryMutation();
     this.saveAll();
     this.notify();
 
@@ -6625,6 +7302,10 @@ class AppDatabase {
       for (const item of tx.items) {
         const b = this.batches.find((batch) => batch.id === item.batchId);
         if (b) writes.push({ subcollection: 'batches', docId: b.id, data: b, op: 'set' });
+      }
+      for (const medId of affectedMedIds) {
+        const med = this.medicines.find((m) => m.id === medId);
+        if (med) writes.push({ subcollection: 'medicines', docId: med.id, data: med, op: 'set' });
       }
       this.persistBatch(writes);
     }
@@ -6844,6 +7525,12 @@ class AppDatabase {
 
   // --- Inventory Checks (Kiểm Kê Thuốc & Vật Tư Y Tế) ---
   public getInventoryChecks(): InventoryCheck[] {
+    const deleted = new Set(this.getDeletedCheckIds());
+    if (deleted.size > 0) {
+      this.inventoryChecks = this.inventoryChecks.filter(
+        (c) => !deleted.has(c.id) && !deleted.has(c.checkCode)
+      );
+    }
     return [...this.inventoryChecks];
   }
 
@@ -6969,6 +7656,15 @@ class AppDatabase {
       check.id
     );
 
+    // Re-sync all affected medicines
+    const affectedMedIds = new Set(
+      check.items.filter((item) => item.difference !== 0).map((item) => item.medicineId)
+    );
+    for (const medId of affectedMedIds) {
+      this.syncMedicine(medId);
+    }
+
+    this.markInventoryMutation();
     this.saveAll();
     this.notify();
 
@@ -6981,6 +7677,10 @@ class AppDatabase {
           const b = this.batches.find((batch) => batch.id === item.batchId);
           if (b) writes.push({ subcollection: 'batches', docId: b.id, data: b, op: 'set' });
         }
+      }
+      for (const medId of affectedMedIds) {
+        const med = this.medicines.find((m) => m.id === medId);
+        if (med) writes.push({ subcollection: 'medicines', docId: med.id, data: med, op: 'set' });
       }
       this.persistBatch(writes);
     }
@@ -9240,7 +9940,7 @@ class AppDatabase {
     this.pushStateToServer();
     fetch('/api/staff-members', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.getAuthHeaders(),
       body: JSON.stringify({ action: 'add', staff: newStaff }),
     }).catch(() => {});
     return newStaff;
@@ -9267,7 +9967,7 @@ class AppDatabase {
     this.pushStateToServer();
     fetch('/api/staff-members', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.getAuthHeaders(),
       body: JSON.stringify({ action: 'update', id, updates }),
     }).catch(() => {});
     return this.staffMembers[idx];
@@ -9291,7 +9991,7 @@ class AppDatabase {
     this.pushStateToServer();
     fetch('/api/staff-members', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.getAuthHeaders(),
       body: JSON.stringify({ action: 'delete', id }),
     }).catch(() => {});
   }
@@ -9314,7 +10014,7 @@ class AppDatabase {
     this.pushStateToServer();
     fetch('/api/staff-members', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.getAuthHeaders(),
       body: JSON.stringify({ action: 'delete_multiple', ids }),
     }).catch(() => {});
     return deletedCount;
@@ -9338,7 +10038,7 @@ class AppDatabase {
     this.pushStateToServer();
     fetch('/api/staff-members', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.getAuthHeaders(),
       body: JSON.stringify({ action: 'delete_all', oldIds }),
     }).catch(() => {});
     return count;
@@ -9555,7 +10255,7 @@ class AppDatabase {
     this.pushStateToServer();
     fetch('/api/staff-members', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.getAuthHeaders(),
       body: JSON.stringify({
         action: 'import',
         staffMembers: this.staffMembers,
@@ -9576,7 +10276,7 @@ class AppDatabase {
       const pushPromise = this.pushStateToServer();
       const directPromise = fetch('/api/staff-members', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: this.getAuthHeaders(),
         body: JSON.stringify({
           action: 'import',
           staffMembers: this.staffMembers,
@@ -10392,23 +11092,18 @@ class AppDatabase {
       councilMembers: payload.councilMembers && payload.councilMembers.length > 0 ? payload.councilMembers : [
         {
           roleTitle: 'Chủ tịch hội đồng',
-          name: 'Nguyễn Văn Hưng',
-          position: 'Phó Hiệu Trưởng',
+          name: 'Ban Giám hiệu',
+          position: 'Đại diện Ban Giám hiệu',
         },
         {
           roleTitle: 'Thư ký hội đồng',
-          name: this.currentUser.fullName,
-          position: 'Cán bộ Y tế học đường',
+          name: this.currentUser.fullName || 'Nhân viên Y tế',
+          position: 'Phụ trách Phòng Y tế học đường',
         },
         {
           roleTitle: 'Ủy viên',
-          name: 'Lê Thị Kim Cúc',
+          name: 'Kế toán trường',
           position: 'Kế toán trường',
-        },
-        {
-          roleTitle: 'Ủy viên giám sát',
-          name: 'Trần Minh Tuấn',
-          position: 'Chủ tịch Công đoàn / Trưởng ban TTND',
         },
       ],
       items: payload.items || [],
@@ -10534,27 +11229,47 @@ class AppDatabase {
     const writes: BatchWriteOp[] = [];
 
     for (const item of disposal.items) {
-      const batch = this.batches.find((b) => b.id === item.batchId);
+      const batch = this.batches.find(
+        (b) =>
+          b.id === item.batchId ||
+          (b.medicineId === item.medicineId && b.batchNumber === item.batchNumber) ||
+          (item.batchNumber && b.batchNumber === item.batchNumber)
+      );
       if (batch) {
         const deductQty = Math.min(batch.quantity, item.disposalQuantity);
-        batch.quantity = Math.max(0, batch.quantity - deductQty);
+        if (deductQty > 0) {
+          batch.quantity = Math.max(0, batch.quantity - deductQty);
 
-        transactionItems.push({
-          medicineId: item.medicineId,
-          medicineCode: item.medicineCode,
-          medicineName: item.medicineName,
-          batchId: batch.id,
-          batchNumber: batch.batchNumber,
-          quantity: item.disposalQuantity,
-          unitPrice: item.unitPrice,
-          totalAmount: item.totalAmount,
-          unit: item.unit,
-          expDate: item.expDate,
-        });
+          transactionItems.push({
+            medicineId: item.medicineId,
+            medicineCode: item.medicineCode,
+            medicineName: item.medicineName,
+            batchId: batch.id,
+            batchNumber: batch.batchNumber,
+            quantity: deductQty,
+            unitPrice: item.unitPrice,
+            totalAmount: deductQty * (item.unitPrice || 0),
+            unit: item.unit,
+            expDate: item.expDate,
+          });
 
-        writes.push({ subcollection: 'batches', docId: batch.id, data: batch, op: 'set' });
+          writes.push({ subcollection: 'batches', docId: batch.id, data: batch, op: 'set' });
+        }
       }
     }
+
+    // Re-sync each affected medicine's stock and computed status
+    const affectedMedIds = new Set(transactionItems.map((it) => it.medicineId));
+    for (const medId of affectedMedIds) {
+      this.syncMedicine(medId);
+      const med = this.medicines.find((m) => m.id === medId);
+      if (med) {
+        writes.push({ subcollection: 'medicines', docId: med.id, data: med, op: 'set' });
+      }
+    }
+
+    const actualDeductedAmount = transactionItems.reduce((sum, it) => sum + (it.totalAmount || 0), 0);
+    const actualDeductedQty = transactionItems.reduce((sum, it) => sum + it.quantity, 0);
 
     // 2. Create export inventory transaction
     const txCode = this.getNextExportCode();
@@ -10569,7 +11284,7 @@ class AppDatabase {
       performer: executor,
       notes: `${executionNotes ? executionNotes + ' | ' : ''}Số QĐ: ${disposal.decisionNumber || 'Chưa ghi'} | Phương pháp: ${disposal.disposalMethod}`,
       items: transactionItems,
-      totalAmount: disposal.totalEstimatedAmount,
+      totalAmount: actualDeductedAmount > 0 ? actualDeductedAmount : disposal.totalEstimatedAmount,
       status: 'completed',
       isDemo: false,
       createdAt: now,
@@ -10592,12 +11307,14 @@ class AppDatabase {
 
     this.logAudit(
       'THỰC HIỆN TIÊU HỦY THUỐC & TRỪ KHO',
-      `Đã tiêu hủy và xuất trừ kho ${disposal.totalQuantity} đơn vị thuốc theo ${disposal.disposalCode} (Phiếu xuất ${newTx.transactionCode}). Người thực hiện: ${executor}`,
+      `Đã tiêu hủy và xuất trừ kho ${actualDeductedQty} đơn vị thuốc theo ${disposal.disposalCode} (Phiếu xuất ${newTx.transactionCode}). Người thực hiện: ${executor}`,
       disposal.id
     );
 
+    this.markInventoryMutation();
     this.saveAll();
     this.notify();
+    this.pushStateToServer().catch(() => {});
 
     if (this.currentUserId) {
       this.persistBatch(writes);
@@ -10683,6 +11400,750 @@ class AppDatabase {
       throw new Error(`Không thể khôi phục dữ liệu: ${err.message}`);
     }
   }
+
+  // =========================================================================
+  // PHÂN HỆ CẤP PHÁT BĂNG VỆ SINH CHO HỌC SINH NỮ (TẾ NHỊ, BẢO MẬT & NHÂN VĂN)
+  // =========================================================================
+
+  public getSanitaryProducts(includeInactive = false): SanitaryNapkinProduct[] {
+    if (includeInactive) {
+      return [...this.sanitaryProducts];
+    }
+    return this.sanitaryProducts.filter((p) => p.isActive);
+  }
+
+  public getSanitaryProductById(id: string): SanitaryNapkinProduct | undefined {
+    return this.sanitaryProducts.find((p) => p.id === id);
+  }
+
+  public addSanitaryProduct(
+    productData: Omit<SanitaryNapkinProduct, 'id' | 'createdAt'>
+  ): SanitaryNapkinProduct {
+    try {
+      localStorage.removeItem('thcs_dongthanh_sanitary_products_cleaned_v1');
+    } catch {}
+    const newProduct: SanitaryNapkinProduct = {
+      id: `sn-prod-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      name: productData.name.trim(),
+      brand: (productData.brand || '').trim(),
+      unit: 'miếng',
+      stockQuantity: Math.max(0, Math.floor(Number(productData.stockQuantity) || 0)),
+      minAlertThreshold: Math.max(1, Math.floor(Number(productData.minAlertThreshold) || 30)),
+      notes: (productData.notes || '').trim(),
+      isActive: productData.isActive !== false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    this.cachedDeletedSanitaryProductIds = this.getDeletedSanitaryProductIds().filter((id) => id !== newProduct.id);
+    try {
+      localStorage.setItem('thcs_dongthanh_deleted_sanitary_prods_v1', JSON.stringify(this.cachedDeletedSanitaryProductIds));
+    } catch {}
+    this.sanitaryProducts.push(newProduct);
+    this.logAudit(
+      'Thêm sản phẩm BVS',
+      `Thêm loại sản phẩm mới: ${newProduct.name} (${newProduct.brand || 'Chung'}) - Tồn kho ban đầu: ${newProduct.stockQuantity} miếng`
+    );
+    this.saveAll();
+    this.saveOperationalBundleLocally();
+    this.scheduleServerPush(true);
+    this.notify();
+    return newProduct;
+  }
+
+  public updateSanitaryProduct(
+    id: string,
+    updates: Partial<SanitaryNapkinProduct>
+  ): SanitaryNapkinProduct | undefined {
+    const idx = this.sanitaryProducts.findIndex((p) => p.id === id);
+    if (idx === -1) return undefined;
+
+    const prev = this.sanitaryProducts[idx];
+    this.sanitaryProducts[idx] = {
+      ...prev,
+      ...updates,
+      unit: 'miếng',
+      stockQuantity: typeof updates.stockQuantity === 'number'
+        ? Math.max(0, Math.floor(updates.stockQuantity))
+        : prev.stockQuantity,
+      minAlertThreshold: typeof updates.minAlertThreshold === 'number'
+        ? Math.max(1, Math.floor(updates.minAlertThreshold))
+        : prev.minAlertThreshold,
+      updatedAt: new Date().toISOString(),
+    };
+
+    this.logAudit(
+      'Cập nhật sản phẩm BVS',
+      `Cập nhật loại: ${this.sanitaryProducts[idx].name}. Ngưỡng cảnh báo: ${this.sanitaryProducts[idx].minAlertThreshold} miếng`
+    );
+    this.saveAll();
+    this.saveOperationalBundleLocally();
+    this.scheduleServerPush(true);
+    this.notify();
+    return this.sanitaryProducts[idx];
+  }
+
+  public deleteSanitaryProduct(id: string): { success: boolean; error?: string } {
+    const idx = this.sanitaryProducts.findIndex((p) => p.id === id);
+    if (idx === -1) return { success: false, error: 'Không tìm thấy sản phẩm' };
+
+    const prod = this.sanitaryProducts[idx];
+    this.addDeletedSanitaryProductId(id);
+    this.sanitaryProducts.splice(idx, 1);
+    this.logAudit('Xóa loại BVS', `Xóa sản phẩm BVS khỏi danh mục: ${prod.name}`, id);
+
+    this.saveAll();
+    this.saveOperationalBundleLocally();
+    this.scheduleServerPush(true);
+    this.notify();
+    return { success: true };
+  }
+
+  public clearAllSanitaryProducts(): void {
+    for (const p of this.sanitaryProducts) {
+      if (p && p.id) {
+        this.addDeletedSanitaryProductId(p.id);
+      }
+    }
+    this.sanitaryProducts = [];
+    localStorage.setItem('thcs_dongthanh_sanitary_products_cleaned_v1', 'true');
+    this.logAudit('Xóa toàn bộ danh mục BVS', 'Đã làm trống danh mục để người dùng tự nhập mới hoàn toàn');
+    this.saveAll();
+    this.saveOperationalBundleLocally();
+    this.scheduleServerPush(true);
+    this.notify();
+  }
+
+  public restoreDefaultSanitaryProducts(): void {
+    localStorage.removeItem('thcs_dongthanh_sanitary_products_cleaned_v1');
+    localStorage.removeItem('thcs_dongthanh_deleted_sanitary_prods_v1');
+    this.cachedDeletedSanitaryProductIds = [];
+    this.sanitaryProducts = [...INITIAL_SANITARY_PRODUCTS];
+    this.logAudit('Khôi phục danh mục BVS', 'Đã khôi phục lại danh mục sản phẩm BVS mẫu');
+    this.saveAll();
+    this.saveOperationalBundleLocally();
+    this.scheduleServerPush(true);
+    this.notify();
+  }
+
+  public deleteSanitaryDispatch(id: string, restoreStock = true): { success: boolean; error?: string } {
+    const idx = this.sanitaryDispatches.findIndex((d) => d.id === id);
+    if (idx === -1) return { success: false, error: 'Không tìm thấy phiếu cấp phát cần xóa.' };
+
+    const dispatch = this.sanitaryDispatches[idx];
+    if (restoreStock && dispatch.status === 'completed') {
+      const product = this.sanitaryProducts.find((p) => p.id === dispatch.productId);
+      if (product) {
+        product.stockQuantity += dispatch.quantity;
+        product.updatedAt = new Date().toISOString();
+      }
+    }
+
+    this.addDeletedSanitaryDispatchId(id);
+    this.sanitaryDispatches.splice(idx, 1);
+    this.logAudit(
+      'Xóa phiếu cấp phát BVS',
+      `Đã xóa vĩnh viễn phiếu cấp phát ${dispatch.dispatchCode} (Lớp ${dispatch.className}, ${dispatch.quantity} miếng)`,
+      id
+    );
+
+    this.saveAll();
+    this.saveOperationalBundleLocally();
+    this.scheduleServerPush(true);
+    this.notify();
+    return { success: true };
+  }
+
+  public clearAllSanitaryDispatches(): { success: boolean; count: number } {
+    const count = this.sanitaryDispatches.length;
+    for (const d of this.sanitaryDispatches) {
+      if (d && d.id) {
+        this.addDeletedSanitaryDispatchId(d.id);
+      }
+    }
+    this.sanitaryDispatches = [];
+    localStorage.setItem('thcs_dongthanh_sanitary_dispatches_cleaned_v1', 'true');
+    this.logAudit('Xóa toàn bộ sổ cấp phát BVS', `Đã xóa sạch toàn bộ ${count} lượt cấp phát BVS`);
+
+    this.saveAll();
+    this.saveOperationalBundleLocally();
+    this.scheduleServerPush(true);
+    this.notify();
+    return { success: true, count };
+  }
+
+  public deleteSanitaryImport(id: string, reverseStock = true): { success: boolean; error?: string } {
+    const idx = this.sanitaryImports.findIndex((i) => i.id === id);
+    if (idx === -1) return { success: false, error: 'Không tìm thấy phiếu nhập kho cần xóa.' };
+
+    const imp = this.sanitaryImports[idx];
+    if (reverseStock && imp.status === 'completed') {
+      const product = this.sanitaryProducts.find((p) => p.id === imp.productId);
+      if (product) {
+        product.stockQuantity = Math.max(0, product.stockQuantity - imp.totalPieces);
+        product.updatedAt = new Date().toISOString();
+      }
+    }
+
+    this.addDeletedSanitaryImportId(id);
+    this.sanitaryImports.splice(idx, 1);
+    this.logAudit(
+      'Xóa phiếu nhập kho BVS',
+      `Đã xóa vĩnh viễn phiếu nhập kho ${imp.importCode} (${imp.totalPieces} miếng)`,
+      id
+    );
+
+    this.saveAll();
+    this.saveOperationalBundleLocally();
+    this.scheduleServerPush(true);
+    this.notify();
+    return { success: true };
+  }
+
+  public clearAllStudentNamesFromDispatches(): { success: boolean; clearedCount: number } {
+    let count = 0;
+    this.sanitaryDispatches = this.sanitaryDispatches.map((d) => {
+      if (d.studentName || d.studentCode || !d.isAnonymous) {
+        count++;
+      }
+      return {
+        ...d,
+        isAnonymous: true,
+        studentName: undefined,
+        studentCode: undefined,
+      };
+    });
+    this.logAudit(
+      'Xóa sạch tên học sinh BVS',
+      `Đã rà soát và xóa sạch toàn bộ tên học sinh trong sổ cấp phát BVS để bảo mật danh tính tuyệt đối (${count} lượt được cập nhật)`
+    );
+    this.saveAll();
+    this.notify();
+    return { success: true, clearedCount: count };
+  }
+
+  public getNextSanitaryDispatchCode(): string {
+    const year = new Date().getFullYear();
+    const prefix = `CP-BVS-${year}-`;
+    const yearDispatches = this.sanitaryDispatches.filter((d) =>
+      d.dispatchCode?.startsWith(prefix)
+    );
+    let maxSeq = 0;
+    for (const d of yearDispatches) {
+      const match = d.dispatchCode.match(/-(\d+)$/);
+      if (match) {
+        const seq = parseInt(match[1], 10);
+        if (seq > maxSeq) maxSeq = seq;
+      }
+    }
+    return `${prefix}${String(maxSeq + 1).padStart(4, '0')}`;
+  }
+
+  public getNextSanitaryImportCode(): string {
+    const year = new Date().getFullYear();
+    const prefix = `NK-BVS-${year}-`;
+    const yearImports = this.sanitaryImports.filter((i) =>
+      i.importCode?.startsWith(prefix)
+    );
+    let maxSeq = 0;
+    for (const i of yearImports) {
+      const match = i.importCode.match(/-(\d+)$/);
+      if (match) {
+        const seq = parseInt(match[1], 10);
+        if (seq > maxSeq) maxSeq = seq;
+      }
+    }
+    return `${prefix}${String(maxSeq + 1).padStart(4, '0')}`;
+  }
+
+  public getSanitaryDispatches(filters?: {
+    startDate?: string;
+    endDate?: string;
+    className?: string;
+    productId?: string;
+    dispenserName?: string;
+    status?: string;
+  }): SanitaryNapkinDispatch[] {
+    let list = [...this.sanitaryDispatches];
+
+    if (filters) {
+      if (filters.status && filters.status !== 'all') {
+        list = list.filter((d) => d.status === filters.status);
+      }
+      if (filters.productId && filters.productId !== 'all') {
+        list = list.filter((d) => d.productId === filters.productId);
+      }
+      if (filters.className && filters.className !== 'all') {
+        const targetCls = normalizeClassName(filters.className);
+        list = list.filter((d) => normalizeClassName(d.className) === targetCls);
+      }
+      if (filters.dispenserName && filters.dispenserName.trim()) {
+        const kw = filters.dispenserName.trim().toLowerCase();
+        list = list.filter((d) => d.dispenserName.toLowerCase().includes(kw));
+      }
+      if (filters.startDate) {
+        const startStr = `${filters.startDate}T00:00:00`;
+        list = list.filter((d) => d.dateTime >= startStr || d.dateTime.startsWith(filters.startDate!));
+      }
+      if (filters.endDate) {
+        const endStr = `${filters.endDate}T23:59:59`;
+        list = list.filter((d) => d.dateTime <= endStr || d.dateTime.startsWith(filters.endDate!));
+      }
+    }
+
+    // Sort descending by date/time
+    return list.sort((a, b) => new Date(b.dateTime).getTime() - new Date(a.dateTime).getTime());
+  }
+
+  public getSanitaryDispatchById(id: string): SanitaryNapkinDispatch | undefined {
+    return this.sanitaryDispatches.find((d) => d.id === id);
+  }
+
+  public addSanitaryDispatch(
+    payload: Omit<SanitaryNapkinDispatch, 'id' | 'dispatchCode' | 'createdAt' | 'status'>
+  ): { success: boolean; dispatch?: SanitaryNapkinDispatch; error?: string } {
+    const qty = Math.floor(Number(payload.quantity));
+    if (isNaN(qty) || qty <= 0) {
+      return { success: false, error: 'Số lượng cấp phát phải là số nguyên dương (tối thiểu 1 miếng).' };
+    }
+
+    let product = this.sanitaryProducts.find((p) => p.id === payload.productId);
+    const customName = (payload as any).customProductName ? String((payload as any).customProductName).trim() : '';
+
+    if (!product && (customName || payload.productId === 'custom')) {
+      const nameToUse = customName || 'Băng vệ sinh tự nhập';
+      // Tự động tạo sản phẩm mới do người dùng tự nhập
+      const initialStock = Math.max(qty, Number((payload as any).initialStock) || 50);
+      product = this.addSanitaryProduct({
+        name: nameToUse,
+        brand: String((payload as any).customProductBrand || 'Tự nhập').trim(),
+        unit: 'miếng',
+        stockQuantity: initialStock,
+        minAlertThreshold: 20,
+        notes: 'Loại sản phẩm BVS tự nhập',
+        isActive: true,
+      });
+    }
+
+    if (!product) {
+      return { success: false, error: 'Vui lòng chọn hoặc tự nhập tên loại sản phẩm hợp lệ.' };
+    }
+
+    if (product.stockQuantity < qty) {
+      return {
+        success: false,
+        error: `Số lượng tồn kho không đủ (Hiện còn: ${product.stockQuantity} miếng, yêu cầu cấp: ${qty} miếng). Vui lòng chọn loại khác hoặc nhập thêm kho!`,
+      };
+    }
+
+    // Deduct stock
+    product.stockQuantity -= qty;
+    product.updatedAt = new Date().toISOString();
+
+    const dispatchCode = this.getNextSanitaryDispatchCode();
+    const finalDateTime = payload.dateTime ? parseDateTimeToISO(payload.dateTime) : new Date().toISOString();
+    const newDispatch: SanitaryNapkinDispatch = {
+      id: `sn-disp-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      dispatchCode,
+      dateTime: finalDateTime,
+      productId: product.id,
+      productName: product.name,
+      quantity: qty,
+      className: (payload.className || 'Chưa rõ').trim(),
+      isAnonymous: true,
+      studentCode: undefined,
+      studentName: undefined,
+      dispenserName: (payload.dispenserName || this.currentUser?.fullName || 'Cán bộ Y tế').trim(),
+      notes: (payload.notes || '').trim() || undefined,
+      status: 'completed',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    this.sanitaryDispatches.unshift(newDispatch);
+    this.logAudit(
+      'Cấp phát BVS nữ sinh',
+      `Đã cấp ${qty} miếng (${product.name}) cho lớp ${newDispatch.className} (Ẩn danh 100%). Mã phiếu: ${dispatchCode}`,
+      newDispatch.id
+    );
+
+    this.saveAll();
+    this.saveOperationalBundleLocally();
+    this.scheduleServerPush(true);
+    this.notify();
+    return { success: true, dispatch: newDispatch };
+  }
+
+  public cancelSanitaryDispatch(
+    id: string,
+    reason: string,
+    cancelledBy?: string
+  ): { success: boolean; error?: string } {
+    const dispatch = this.sanitaryDispatches.find((d) => d.id === id);
+    if (!dispatch) {
+      return { success: false, error: 'Không tìm thấy phiếu cấp phát.' };
+    }
+    if (dispatch.status === 'cancelled') {
+      return { success: false, error: 'Phiếu này đã được hủy trước đó.' };
+    }
+
+    // Restore stock
+    const product = this.sanitaryProducts.find((p) => p.id === dispatch.productId);
+    if (product) {
+      product.stockQuantity += dispatch.quantity;
+      product.updatedAt = new Date().toISOString();
+    }
+
+    dispatch.status = 'cancelled';
+    dispatch.cancelledAt = new Date().toISOString();
+    dispatch.cancelledBy = (cancelledBy || this.currentUser?.fullName || 'Cán bộ Y tế').trim();
+    dispatch.cancelReason = (reason || 'Hủy giao dịch cấp phát theo yêu cầu').trim();
+    dispatch.updatedAt = new Date().toISOString();
+
+    this.logAudit(
+      'Hủy phiếu cấp phát BVS',
+      `Đã hủy phiếu ${dispatch.dispatchCode} (hoàn lại ${dispatch.quantity} miếng vào tồn kho ${product?.name || ''}). Lý do: ${dispatch.cancelReason}`,
+      dispatch.id
+    );
+
+    this.saveAll();
+    this.saveOperationalBundleLocally();
+    this.scheduleServerPush(true);
+    this.notify();
+    return { success: true };
+  }
+
+  public getSanitaryImports(filters?: {
+    startDate?: string;
+    endDate?: string;
+    productId?: string;
+    status?: string;
+  }): SanitaryNapkinImport[] {
+    let list = [...this.sanitaryImports];
+
+    if (filters) {
+      if (filters.status && filters.status !== 'all') {
+        list = list.filter((i) => i.status === filters.status);
+      }
+      if (filters.productId && filters.productId !== 'all') {
+        list = list.filter((i) => i.productId === filters.productId);
+      }
+      if (filters.startDate) {
+        list = list.filter((i) => i.importDate >= filters.startDate!);
+      }
+      if (filters.endDate) {
+        list = list.filter((i) => i.importDate <= filters.endDate!);
+      }
+    }
+
+    return list.sort(
+      (a, b) => new Date(`${b.importDate}T${b.importTime || '00:00'}`).getTime() -
+                new Date(`${a.importDate}T${a.importTime || '00:00'}`).getTime()
+    );
+  }
+
+  public getSanitaryImportById(id: string): SanitaryNapkinImport | undefined {
+    return this.sanitaryImports.find((i) => i.id === id);
+  }
+
+  public addSanitaryImport(
+    payload: Omit<SanitaryNapkinImport, 'id' | 'importCode' | 'createdAt' | 'status'>
+  ): { success: boolean; importRecord?: SanitaryNapkinImport; error?: string } {
+    let totalPieces = 0;
+    if (payload.packagingType === 'pack') {
+      const packCount = Math.floor(Number(payload.packCount));
+      const piecesPerPack = Math.floor(Number(payload.piecesPerPack));
+      if (isNaN(packCount) || packCount <= 0 || isNaN(piecesPerPack) || piecesPerPack <= 0) {
+        return { success: false, error: 'Vui lòng nhập đúng số gói và số miếng trong mỗi gói.' };
+      }
+      totalPieces = packCount * piecesPerPack;
+    } else {
+      totalPieces = Math.floor(Number(payload.totalPieces));
+      if (isNaN(totalPieces) || totalPieces <= 0) {
+        return { success: false, error: 'Số lượng miếng nhập kho phải là số nguyên dương.' };
+      }
+    }
+
+    let product = this.sanitaryProducts.find((p) => p.id === payload.productId);
+    const customName = (payload as any).customProductName ? String((payload as any).customProductName).trim() : '';
+    if (!product && (customName || payload.productId === 'custom' || this.sanitaryProducts.length === 0)) {
+      const nameToUse = customName || (payload.productName ? String(payload.productName).trim() : '') || 'BVS Diana Sensi Cool Fresh 23cm';
+      product = this.addSanitaryProduct({
+        name: nameToUse,
+        brand: String((payload as any).customProductBrand || 'Diana / Kotex').trim(),
+        unit: 'miếng',
+        stockQuantity: 0,
+        minAlertThreshold: 20,
+        notes: 'Loại sản phẩm BVS tạo tự động khi nhập kho',
+        isActive: true,
+      });
+    }
+
+    if (!product) {
+      if (this.sanitaryProducts.length > 0) {
+        product = this.sanitaryProducts[0];
+      } else {
+        product = this.addSanitaryProduct({
+          name: 'BVS Diana Sensi Cool Fresh 23cm',
+          brand: 'Diana Sensi',
+          unit: 'miếng',
+          stockQuantity: 0,
+          minAlertThreshold: 20,
+          notes: 'Tự động tạo khi nhập kho',
+          isActive: true,
+        });
+      }
+    }
+
+    // Add to stock
+    product.stockQuantity += totalPieces;
+    product.updatedAt = new Date().toISOString();
+
+    const importCode = this.getNextSanitaryImportCode();
+    const newImport: SanitaryNapkinImport = {
+      id: `sn-imp-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      importCode,
+      importDate: payload.importDate ? normalizeDateToISO(payload.importDate) : new Date().toISOString().split('T')[0],
+      importTime: payload.importTime ? formatTime24H(payload.importTime) : formatTime24H(new Date()),
+      productId: product.id,
+      productName: product.name,
+      packagingType: payload.packagingType,
+      packCount: payload.packagingType === 'pack' ? payload.packCount : undefined,
+      piecesPerPack: payload.packagingType === 'pack' ? payload.piecesPerPack : undefined,
+      totalPieces,
+      sourceOrSponsor: (payload.sourceOrSponsor || 'Ngân sách y tế học đường').trim(),
+      receiverName: (payload.receiverName || this.currentUser?.fullName || 'Cán bộ Y tế').trim(),
+      notes: (payload.notes || '').trim() || undefined,
+      status: 'completed',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    this.sanitaryImports.unshift(newImport);
+    this.logAudit(
+      'Nhập kho BVS nữ sinh',
+      `Đã nhập ${totalPieces} miếng (${product.name}) từ nguồn "${newImport.sourceOrSponsor}". Mã phiếu: ${importCode}`,
+      newImport.id
+    );
+
+    this.saveAll();
+    this.saveOperationalBundleLocally();
+    this.scheduleServerPush(true);
+    this.notify();
+    return { success: true, importRecord: newImport };
+  }
+
+  public cancelSanitaryImport(
+    id: string,
+    reason: string,
+    cancelledBy?: string
+  ): { success: boolean; error?: string } {
+    const importRecord = this.sanitaryImports.find((i) => i.id === id);
+    if (!importRecord) {
+      return { success: false, error: 'Không tìm thấy phiếu nhập kho.' };
+    }
+    if (importRecord.status === 'cancelled') {
+      return { success: false, error: 'Phiếu này đã được hủy trước đó.' };
+    }
+
+    const product = this.sanitaryProducts.find((p) => p.id === importRecord.productId);
+    if (product) {
+      product.stockQuantity = Math.max(0, product.stockQuantity - importRecord.totalPieces);
+      product.updatedAt = new Date().toISOString();
+    }
+
+    importRecord.status = 'cancelled';
+    importRecord.cancelledAt = new Date().toISOString();
+    importRecord.cancelledBy = (cancelledBy || this.currentUser?.fullName || 'Cán bộ Y tế').trim();
+    importRecord.cancelReason = (reason || 'Hủy phiếu nhập kho theo yêu cầu').trim();
+    importRecord.updatedAt = new Date().toISOString();
+
+    this.logAudit(
+      'Hủy phiếu nhập kho BVS',
+      `Đã hủy phiếu ${importRecord.importCode} (trừ lại ${importRecord.totalPieces} miếng từ tồn kho ${product?.name || ''}). Lý do: ${importRecord.cancelReason}`,
+      importRecord.id
+    );
+
+    this.saveAll();
+    this.saveOperationalBundleLocally();
+    this.scheduleServerPush(true);
+    this.notify();
+    return { success: true };
+  }
+
+  public getSanitarySettings(): SanitaryNapkinSettings {
+    return { ...this.sanitarySettings };
+  }
+
+  public updateSanitarySettings(settings: Partial<SanitaryNapkinSettings>): SanitaryNapkinSettings {
+    this.sanitarySettings = {
+      ...this.sanitarySettings,
+      ...settings,
+    };
+    this.saveAll();
+    this.saveOperationalBundleLocally();
+    this.scheduleServerPush(true);
+    this.notify();
+    return this.sanitarySettings;
+  }
+
+  public getSanitaryMetrics() {
+    const activeProducts = this.sanitaryProducts.filter((p) => p.isActive);
+    const totalStock = activeProducts.reduce((sum, p) => sum + (p.stockQuantity || 0), 0);
+
+    const now = new Date();
+    const currentMonthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+    const completedDispatches = this.sanitaryDispatches.filter((d) => d.status === 'completed');
+    const monthDispatches = completedDispatches.filter((d) => d.dateTime.startsWith(currentMonthPrefix));
+
+    const totalDispatchedThisMonth = monthDispatches.reduce((sum, d) => sum + (d.quantity || 0), 0);
+    const dispatchCountThisMonth = monthDispatches.length;
+
+    const totalDispatchedAllTime = completedDispatches.reduce((sum, d) => sum + (d.quantity || 0), 0);
+    const totalDispatchCountAllTime = completedDispatches.length;
+
+    const completedImports = this.sanitaryImports.filter((i) => i.status === 'completed');
+    const monthImports = completedImports.filter((i) => i.importDate.startsWith(currentMonthPrefix));
+    const totalImportedThisMonth = monthImports.reduce((sum, i) => sum + (i.totalPieces || 0), 0);
+
+    const lowStockProducts = activeProducts.filter((p) => p.stockQuantity <= p.minAlertThreshold);
+    const hasLowStockAlert = lowStockProducts.length > 0;
+
+    return {
+      totalStock,
+      totalDispatchedThisMonth,
+      dispatchCountThisMonth,
+      totalDispatchedAllTime,
+      totalDispatchCountAllTime,
+      totalImportedThisMonth,
+      lowStockProducts,
+      hasLowStockAlert,
+      activeProductsCount: activeProducts.length,
+      currentMonthLabel: `Tháng ${now.getMonth() + 1}/${now.getFullYear()}`,
+    };
+  }
+
+  public getSanitaryReport(timeRange: {
+    type: 'week' | 'month' | 'semester1' | 'semester2' | 'year' | 'custom';
+    startDate?: string;
+    endDate?: string;
+  }) {
+    const now = new Date();
+    let start = '';
+    let end = '';
+    let label = '';
+
+    if (timeRange.type === 'week') {
+      const day = now.getDay() || 7;
+      const monday = new Date(now);
+      monday.setDate(now.getDate() - day + 1);
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 6);
+      start = monday.toISOString().split('T')[0];
+      end = sunday.toISOString().split('T')[0];
+      label = `Tuần này (${formatDateVN(start)} - ${formatDateVN(end)})`;
+    } else if (timeRange.type === 'month') {
+      const y = now.getFullYear();
+      const m = now.getMonth() + 1;
+      start = `${y}-${String(m).padStart(2, '0')}-01`;
+      const lastDay = new Date(y, m, 0).getDate();
+      end = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+      label = `Tháng ${m}/${y}`;
+    } else if (timeRange.type === 'semester1') {
+      const y = now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear() - 1;
+      start = `${y}-09-01`;
+      end = `${y + 1}-01-15`;
+      label = `Học kỳ 1 (Năm học ${y} - ${y + 1})`;
+    } else if (timeRange.type === 'semester2') {
+      const y = now.getMonth() >= 8 ? now.getFullYear() + 1 : now.getFullYear();
+      start = `${y}-01-16`;
+      end = `${y}-05-31`;
+      label = `Học kỳ 2 (Năm học ${y - 1} - ${y})`;
+    } else if (timeRange.type === 'year') {
+      const y = now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear() - 1;
+      start = `${y}-09-01`;
+      end = `${y + 1}-05-31`;
+      label = `Toàn năm học ${y} - ${y + 1}`;
+    } else {
+      start = timeRange.startDate || '2026-01-01';
+      end = timeRange.endDate || now.toISOString().split('T')[0];
+      label = `Từ ${formatDateVN(start)} đến ${formatDateVN(end)}`;
+    }
+
+    const dispatches = this.getSanitaryDispatches({
+      startDate: start,
+      endDate: end,
+      status: 'completed',
+    });
+
+    const imports = this.getSanitaryImports({
+      startDate: start,
+      endDate: end,
+      status: 'completed',
+    });
+
+    const totalDispatchedPieces = dispatches.reduce((sum, d) => sum + d.quantity, 0);
+    const totalDispatchCount = dispatches.length; // Số lượt cấp
+    const anonymousCount = dispatches.filter((d) => d.isAnonymous).length;
+
+    // By product summary
+    const byProductMap = new Map<string, { product: SanitaryNapkinProduct; pieces: number; count: number }>();
+    for (const p of this.sanitaryProducts) {
+      byProductMap.set(p.id, { product: p, pieces: 0, count: 0 });
+    }
+    for (const d of dispatches) {
+      const entry = byProductMap.get(d.productId);
+      if (entry) {
+        entry.pieces += d.quantity;
+        entry.count += 1;
+      }
+    }
+
+    // By class summary
+    const byClassMap = new Map<string, { className: string; pieces: number; count: number }>();
+    for (const d of dispatches) {
+      const cls = d.className || 'Chưa rõ lớp';
+      const existing = byClassMap.get(cls) || { className: cls, pieces: 0, count: 0 };
+      existing.pieces += d.quantity;
+      existing.count += 1;
+      byClassMap.set(cls, existing);
+    }
+
+    // By sponsor/source summary
+    const bySourceMap = new Map<string, { source: string; pieces: number; count: number }>();
+    for (const imp of imports) {
+      const src = imp.sourceOrSponsor || 'Ngân sách trường';
+      const existing = bySourceMap.get(src) || { source: src, pieces: 0, count: 0 };
+      existing.pieces += imp.totalPieces;
+      existing.count += 1;
+      bySourceMap.set(src, existing);
+    }
+
+    const totalImportedPieces = imports.reduce((sum, i) => sum + i.totalPieces, 0);
+    const totalCurrentStock = this.sanitaryProducts
+      .filter((p) => p.isActive)
+      .reduce((sum, p) => sum + p.stockQuantity, 0);
+
+    return {
+      periodLabel: label,
+      startDate: start,
+      endDate: end,
+      totalDispatchCount, // Phân biệt rõ "Số lượt cấp"
+      totalDispatchedPieces, // Tổng số miếng đã cấp
+      anonymousCount,
+      namedCount: totalDispatchCount - anonymousCount,
+      totalImportedPieces,
+      totalCurrentStock,
+      dispatches,
+      imports,
+      byProduct: Array.from(byProductMap.values()).filter((e) => e.count > 0 || e.product.isActive),
+      byClass: Array.from(byClassMap.values()).sort((a, b) => b.pieces - a.pieces),
+      bySource: Array.from(bySourceMap.values()).sort((a, b) => b.pieces - a.pieces),
+      privacyNote:
+        'Thống kê tuân thủ nguyên tắc tôn trọng quyền riêng tư học sinh: Số lượt cấp phản ánh tần suất hỗ trợ y tế học đường khẩn cấp và không suy đoán số lượng học sinh duy nhất từ các lượt cấp ẩn danh.',
+    };
+  }
 }
 
 export const db = new AppDatabase();
+

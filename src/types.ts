@@ -44,8 +44,16 @@ export interface User {
   phone?: string;
   title?: string;        // Chức vụ / Vị trí công tác
   department?: string;   // Đơn vị / Phòng ban
-  status?: 'active' | 'inactive';
+  status?: 'active' | 'inactive' | 'locked';
   permissions?: UserPermission;
+  mustChangePassword?: boolean;
+  hasPasswordSet?: boolean;
+  lastLoginAt?: string;
+  failedLoginAttempts?: number;
+  lockedUntil?: string | null;
+  pendingResetRequestAt?: string | null;
+  hasActiveSetupLink?: boolean;
+  setupLinkExpiresAt?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -228,9 +236,11 @@ export interface InventoryCheck {
 export type DisposalStatus = 'draft' | 'pending_approval' | 'approved' | 'completed' | 'cancelled';
 
 export interface DisposalCouncilMember {
-  roleTitle: string; // 'Chủ tịch hội đồng' | 'Thư ký' | 'Ủy viên' | 'Ủy viên giám sát'
+  roleTitle: string; // 'Chủ tịch hội đồng' | 'Thư ký hội đồng' | 'Ủy viên' | 'Kế toán trường'
   name: string;
-  position: string;  // 'Phó Hiệu trưởng' | 'Cán bộ Y tế' | 'Kế toán trường' | 'Chủ tịch Công đoàn'
+  position: string;  // 'Đại diện Ban Giám hiệu' | 'Phụ trách Phòng Y tế' | 'Kế toán trường'
+  signNote?: string; // Ghi chú ký: '(Ký, đóng dấu duyệt)', '(Ký và ghi rõ họ tên)'
+  signatureContent?: string; // Nội dung ký nhận tự điền / chữ ký xác nhận (hoặc để trống ký tay)
 }
 
 export interface MedicineDisposalItem {
@@ -524,6 +534,7 @@ export interface ClinicVisit {
   isTransferred: boolean;    // Có chuyển tuyến y tế không
   transferHospital?: string; // Cơ sở y tế chuyển đến
   performer: string;         // Cán bộ y tế thực hiện
+  signatureNote?: string;    // Nội dung ký nhận tự điền / chữ ký
   notes?: string;
   inventoryTransactionId?: string; // ID phiếu xuất kho tương ứng
   createdAt: string;
@@ -593,4 +604,70 @@ export interface SchoolClass {
   createdAt?: string;
   updatedAt?: string;
 }
+
+// --- Phân hệ Cấp phát Băng Vệ Sinh Học Sinh Nữ (Tế nhị, Nhân văn & Chuẩn Y tế Học đường) ---
+export interface SanitaryNapkinProduct {
+  id: string;
+  name: string; // Tên loại BVS: BVS ban ngày có cánh (23cm), BVS ban đêm (28-35cm), BVS hàng ngày,...
+  brand?: string; // Kotex, Diana, Laurier, Sofy,...
+  unit: string; // Luôn là 'miếng'
+  stockQuantity: number; // Tổng tồn kho hiện tại tính bằng miếng
+  minAlertThreshold: number; // Ngưỡng cảnh báo tồn kho tối thiểu (mặc định 30 miếng)
+  notes?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface SanitaryNapkinDispatch {
+  id: string;
+  dispatchCode: string; // CP-BVS-2026-0001
+  dateTime: string; // YYYY-MM-DDTHH:mm:ss
+  productId: string;
+  productName: string;
+  quantity: number; // Số miếng (mặc định 1)
+  className: string; // Lớp học (VD: 6A1, 7/2, 8A3, 9/1...)
+  isAnonymous: boolean; // Luôn luôn true: Bảo mật 100% ẩn danh học sinh
+  studentCode?: string; // Không lưu trữ để bảo vệ quyền riêng tư học sinh
+  studentName?: string; // Không lưu trữ để bảo vệ quyền riêng tư học sinh
+  dispenserName: string; // Người cấp (Cán bộ y tế)
+  notes?: string; // Ghi chú (VD: Khẩn cấp giờ thể dục, Cấp dự phòng...)
+  status: 'completed' | 'cancelled'; // Hỗ trợ hủy giao dịch
+  cancelledAt?: string;
+  cancelledBy?: string;
+  cancelReason?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface SanitaryNapkinImport {
+  id: string;
+  importCode: string; // NK-BVS-2026-0001
+  importDate: string; // YYYY-MM-DD
+  importTime?: string; // HH:mm
+  productId: string;
+  productName: string;
+  packagingType: 'piece' | 'pack'; // Nhập theo miếng hoặc gói
+  packCount?: number; // Nếu nhập theo gói: số gói
+  piecesPerPack?: number; // Số miếng mỗi gói (VD: 8 miếng/gói, 10 miếng/gói)
+  totalPieces: number; // Tổng số miếng nhập kho
+  sourceOrSponsor: string; // Nguồn cung cấp: Ngân sách y tế, Hội CMHS tài trợ, Nhà tài trợ Diana/Kotex, Quyên góp...
+  receiverName: string; // Người nhập
+  notes?: string;
+  status: 'completed' | 'cancelled';
+  cancelledAt?: string;
+  cancelledBy?: string;
+  cancelReason?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface SanitaryNapkinSettings {
+  minAlertThresholdDefault: number; // Mặc định cảnh báo toàn trường (VD: 50 miếng)
+  defaultQuantityPerDispatch: number; // Mặc định 1 miếng
+  allowAnonymous: boolean; // Cho phép cấp ẩn danh (luôn true)
+  requireClass: boolean; // Bắt buộc chọn lớp
+  enableSoundNotification?: boolean;
+}
+
 

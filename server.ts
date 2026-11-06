@@ -2,11 +2,13 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { ServerAuthStore, sanitizeUserForClient } from './src/server/authService.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const DATA_DIR = path.join(__dirname, 'data');
+const authStore = new ServerAuthStore(DATA_DIR);
 const STATE_FILE = path.join(DATA_DIR, 'school_state.json');
 const FIREBASE_CONFIG_FILE = path.join(__dirname, 'firebase-applet-config.json');
 const FIRESTORE_SYNC_TOKEN = 'THCS_DONG_THANH_2026_V1';
@@ -147,73 +149,76 @@ function mergeById(existingArr, incomingArr, deletedIdSet) {
   return Array.from(map.values());
 }
 
-function normalizeServerUsersToTwoRoles(usersArr) {
-  const defaultAdminPerms = {
-    canManageMedicine: true,
-    canManageTransactions: true,
-    canManageClinicVisits: true,
-    canManageStudents: true,
-    canManageInventoryCheck: true,
-    canViewReports: true,
-    canManageSettings: true,
-    canApproveAudits: true,
-  };
-  const defaultMedicPerms = {
-    canManageMedicine: true,
-    canManageTransactions: true,
-    canManageClinicVisits: true,
-    canManageStudents: true,
-    canManageInventoryCheck: true,
-    canViewReports: true,
-    canManageSettings: false,
-    canApproveAudits: false,
-  };
-  const existingAdmin = Array.isArray(usersArr)
-    ? usersArr.find((u) => u && (u.id === 'role-admin' || u.role === 'admin'))
-    : null;
-  const existingMedic = Array.isArray(usersArr)
-    ? usersArr.find((u) => u && (u.id === 'role-medic' || u.role === 'medic'))
-    : null;
-
-  return [
-    {
-      id: 'role-admin',
-      username: 'quantri',
-      fullName: 'Quản trị',
-      role: 'admin',
-      email: '',
-      phone: '',
-      title: 'Nhiệm vụ Quản trị hệ thống',
-      department: 'Quản trị & Phê duyệt hệ thống',
-      status: 'active',
-      permissions: existingAdmin?.permissions
-        ? { ...defaultAdminPerms, ...existingAdmin.permissions, canManageSettings: true, canApproveAudits: true }
-        : defaultAdminPerms,
-      createdAt: '2026-01-01T08:00:00.000Z',
-      updatedAt: existingAdmin?.updatedAt || new Date().toISOString(),
-    },
-    {
-      id: 'role-medic',
-      username: 'nhanvien_yte',
-      fullName: 'Nhân viên Y tế',
-      role: 'medic',
-      email: '',
-      phone: '',
-      title: 'Nhiệm vụ Nhân viên Y tế',
-      department: 'Phòng Y tế Học đường',
-      status: 'active',
-      permissions: existingMedic?.permissions
-        ? { ...defaultMedicPerms, ...existingMedic.permissions }
-        : defaultMedicPerms,
-      createdAt: '2026-01-01T08:00:00.000Z',
-      updatedAt: existingMedic?.updatedAt || new Date().toISOString(),
-    },
-  ];
+function normalizeServerUsersToTwoRoles(_usersArr?: any) {
+  return authStore.getSanitizedUsers();
 }
 
+const DEFAULT_SANITARY_PRODUCTS_SERVER = [
+  {
+    id: 'sn-prod-01',
+    name: 'BVS ban ngày siêu mỏng cánh (23cm)',
+    brand: 'Diana Sensi Cool Fresh / Kotex',
+    unit: 'miếng',
+    stockQuantity: 120,
+    minAlertThreshold: 30,
+    notes: 'Dùng phổ biến ban ngày cho học sinh nữ khi đến chu kỳ đột xuất.',
+    isActive: true,
+    createdAt: '2026-09-01T08:00:00.000Z',
+  },
+  {
+    id: 'sn-prod-02',
+    name: 'BVS ban đêm siêu thấm chống tràn (28-35cm)',
+    brand: 'Kotex Night / Diana Night',
+    unit: 'miếng',
+    stockQuantity: 45,
+    minAlertThreshold: 20,
+    notes: 'Dùng cho các trường hợp khẩn cấp ra nhiều hoặc học sinh tham gia hoạt động ngoại khóa kéo dài.',
+    isActive: true,
+    createdAt: '2026-09-01T08:00:00.000Z',
+  },
+  {
+    id: 'sn-prod-03',
+    name: 'BVS hàng ngày kháng khuẩn mặt bông (15cm)',
+    brand: 'Diana Daily / Kotex Cool',
+    unit: 'miếng',
+    stockQuantity: 60,
+    minAlertThreshold: 20,
+    notes: 'Dùng đầu/cuối chu kỳ hoặc vệ sinh học đường.',
+    isActive: true,
+    createdAt: '2026-09-01T08:00:00.000Z',
+  },
+  {
+    id: 'sn-prod-04',
+    name: 'BVS Laurier Super Slimguard (Nhật Bản)',
+    brand: 'Laurier (Nhật bản)',
+    unit: 'miếng',
+    stockQuantity: 400,
+    minAlertThreshold: 30,
+    notes: 'Dành cho các em có làn da nhạy cảm hoặc dễ kích ứng.',
+    isActive: true,
+    createdAt: '2026-09-01T08:00:00.000Z',
+  },
+  {
+    id: 'sn-prod-05',
+    name: 'BVS Diana Sensi Cool Fresh 23cm (Nhập kho tài trợ)',
+    brand: 'Diana Sensi',
+    unit: 'miếng',
+    stockQuantity: 80,
+    minAlertThreshold: 20,
+    notes: 'Nhập kho tài trợ 10 gói x 8 miếng quy đổi thành 80 miếng.',
+    isActive: true,
+    createdAt: '2026-11-03T08:00:00.000Z',
+  },
+];
+
 let cachedState = loadServerState();
-if (cachedState && Array.isArray(cachedState.users)) {
-  cachedState.users = normalizeServerUsersToTwoRoles(cachedState.users);
+if (cachedState) {
+  if (Array.isArray(cachedState.users)) {
+    cachedState.users = normalizeServerUsersToTwoRoles(cachedState.users);
+  }
+  if ((!cachedState.sanitaryProducts || cachedState.sanitaryProducts.length === 0) && !cachedState.sanitaryProductsCleaned) {
+    cachedState.sanitaryProducts = [...DEFAULT_SANITARY_PRODUCTS_SERVER];
+  }
 }
 
 const DEMO_TEACHER_BY_CLASS: Record<string, string> = {
@@ -378,6 +383,15 @@ function mergeSchoolState(existing, incoming) {
   const deletedStaffIds = Array.from(
     new Set([...(existing.deletedStaffIds || []), ...(incoming.deletedStaffIds || [])])
   );
+  const deletedSanitaryProductIds = Array.from(
+    new Set([...(existing.deletedSanitaryProductIds || []), ...(incoming.deletedSanitaryProductIds || [])])
+  );
+  const deletedSanitaryDispatchIds = Array.from(
+    new Set([...(existing.deletedSanitaryDispatchIds || []), ...(incoming.deletedSanitaryDispatchIds || [])])
+  );
+  const deletedSanitaryImportIds = Array.from(
+    new Set([...(existing.deletedSanitaryImportIds || []), ...(incoming.deletedSanitaryImportIds || [])])
+  );
 
   const deletedVisitSet = new Set(deletedVisitIds);
   const deletedUserSet = new Set(deletedUserIds);
@@ -387,6 +401,9 @@ function mergeSchoolState(existing, incoming) {
   const deletedCheckupSet = new Set(deletedCheckupIds);
   const deletedStudentSet = new Set(deletedStudentIds);
   const deletedStaffSet = new Set(deletedStaffIds);
+  const deletedSanitaryProductSet = new Set(deletedSanitaryProductIds);
+  const deletedSanitaryDispatchSet = new Set(deletedSanitaryDispatchIds);
+  const deletedSanitaryImportSet = new Set(deletedSanitaryImportIds);
 
   // 1. Merge Clinic Visits by ID (preserving all visits across machines except explicitly deleted ones)
   const mergedClinicVisits = mergeById(
@@ -445,9 +462,17 @@ function mergeSchoolState(existing, incoming) {
   const incomingInvTime = Number(incoming.inventoryUpdatedAt || 0);
   const incomingTxCount = Array.isArray(incoming.transactions) ? incoming.transactions.length : 0;
   const existingTxCount = Array.isArray(existing.transactions) ? existing.transactions.length : 0;
+  const incomingDispCompleted = Array.isArray(incoming.disposals)
+    ? incoming.disposals.filter((d: any) => d && d.status === 'completed').length
+    : 0;
+  const existingDispCompleted = Array.isArray(existing.disposals)
+    ? existing.disposals.filter((d: any) => d && d.status === 'completed').length
+    : 0;
 
   const preferIncomingInventory =
-    incomingInvTime >= existingInvTime || incomingTxCount >= existingTxCount;
+    incomingInvTime >= existingInvTime ||
+    incomingTxCount >= existingTxCount ||
+    incomingDispCompleted > existingDispCompleted;
 
   const mergedBatches =
     preferIncomingInventory && Array.isArray(incoming.batches) && incoming.batches.length > 0
@@ -458,6 +483,14 @@ function mergeSchoolState(existing, incoming) {
     preferIncomingInventory && Array.isArray(incoming.medicines) && incoming.medicines.length > 0
       ? incoming.medicines
       : existing.medicines || incoming.medicines || [];
+
+  // Always keep medicine totalStock in sync with mergedBatches
+  for (const med of mergedMedicines) {
+    if (med && med.id) {
+      const medBatches = mergedBatches.filter((b: any) => b && b.medicineId === med.id);
+      med.totalStock = medBatches.reduce((acc: number, b: any) => acc + (b.quantity || 0), 0);
+    }
+  }
 
   const mergedSupplies =
     preferIncomingInventory && Array.isArray(incoming.supplies) && incoming.supplies.length > 0
@@ -520,6 +553,29 @@ function mergeSchoolState(existing, incoming) {
     inventoryChecks: mergedInventoryChecks,
     disposals: mergedDisposals,
     settings: { ...(existing.settings || {}), ...(incoming.settings || {}) },
+    sanitarySettings: { ...(existing.sanitarySettings || {}), ...(incoming.sanitarySettings || {}) },
+    sanitaryProducts: (() => {
+      const hasIncoming = Array.isArray(incoming.sanitaryProducts) && incoming.sanitaryProducts.length > 0;
+      const hasExisting = Array.isArray(existing.sanitaryProducts) && existing.sanitaryProducts.length > 0;
+      if (hasIncoming && hasExisting) {
+        return mergeById(existing.sanitaryProducts, incoming.sanitaryProducts, null);
+      }
+      if (hasIncoming) {
+        return incoming.sanitaryProducts;
+      }
+      if (hasExisting) {
+        return existing.sanitaryProducts;
+      }
+      return [...DEFAULT_SANITARY_PRODUCTS_SERVER];
+    })(),
+    sanitaryDispatches: incoming.sanitaryDispatchesCleaned
+      ? []
+      : mergeById(existing.sanitaryDispatches, incoming.sanitaryDispatches, deletedSanitaryDispatchSet),
+    sanitaryImports: incoming.sanitaryImportsCleaned
+      ? []
+      : mergeById(existing.sanitaryImports, incoming.sanitaryImports, deletedSanitaryImportSet),
+    sanitaryProductsCleaned: false,
+    sanitaryDispatchesCleaned: Boolean(incoming.sanitaryDispatchesCleaned && (!incoming.sanitaryDispatches || incoming.sanitaryDispatches.length === 0)),
     users: mergedUsers,
     staffMembers: mergedStaffMembers,
     students: mergedStudents,
@@ -536,6 +592,9 @@ function mergeSchoolState(existing, incoming) {
     deletedCheckupIds,
     deletedStudentIds,
     deletedStaffIds,
+    deletedSanitaryProductIds: (deletedSanitaryProductIds || []).filter((id) => !DEFAULT_SANITARY_PRODUCTS_SERVER.some((dp) => dp.id === id)),
+    deletedSanitaryDispatchIds,
+    deletedSanitaryImportIds,
     staffUpdatedAt: Math.max(existingStaffTime, incomingStaffTime, Date.now()),
     staffCleaned: Boolean(incoming.staffCleaned),
     realStudentsImported,
@@ -575,6 +634,10 @@ async function pushStateToCloudFirestore(state: any, forceStudents = false): Pro
       inventoryChecks: state.inventoryChecks || [],
       disposals: state.disposals || [],
       settings: state.settings || {},
+      sanitarySettings: state.sanitarySettings || {},
+      sanitaryProducts: state.sanitaryProducts || [],
+      sanitaryDispatches: state.sanitaryDispatches || [],
+      sanitaryImports: state.sanitaryImports || [],
       users: state.users || [],
       staffMembers: state.staffMembers || [],
       clinicVisits: state.clinicVisits || [],
@@ -587,7 +650,17 @@ async function pushStateToCloudFirestore(state: any, forceStudents = false): Pro
       deletedEventIds: state.deletedEventIds || [],
       deletedCheckupIds: state.deletedCheckupIds || [],
       deletedStudentIds: state.deletedStudentIds || [],
-      deletedStaffIds: state.deletedStaffIds || [],
+      deletedSanitaryProductIds: (state.deletedSanitaryProductIds || []).filter(
+        (id: string) => !(state.sanitaryProducts || []).some((p: any) => p && p.id === id)
+      ),
+      deletedSanitaryDispatchIds: state.deletedSanitaryDispatchIds || [],
+      deletedSanitaryImportIds: state.deletedSanitaryImportIds || [],
+      sanitaryProductsCleaned: Boolean(
+        state.sanitaryProductsCleaned && (!state.sanitaryProducts || state.sanitaryProducts.length === 0)
+      ),
+      sanitaryDispatchesCleaned: Boolean(
+        state.sanitaryDispatchesCleaned && (!state.sanitaryDispatches || state.sanitaryDispatches.length === 0)
+      ),
       staffUpdatedAt: state.staffUpdatedAt || Date.now(),
       staffCleaned: Boolean(state.staffCleaned),
       inventoryUpdatedAt: state.inventoryUpdatedAt || Date.now(),
@@ -714,12 +787,39 @@ async function pullStateFromCloudFirestore(force = false): Promise<boolean> {
     );
     cloudIncoming.revision = cloudRev;
 
-    const prevJson = cachedState ? JSON.stringify({ c: cachedState.classes, v: cachedState.clinicVisits?.length, s: cachedState.students?.length, st: cachedState.staffMembers?.length, stu: cachedState.staffUpdatedAt }) : '';
+    // Protect sanitary products from being overwritten by stale or quota-frozen Cloud Firestore chunks
+    if (
+      (!cloudIncoming.sanitaryProducts || cloudIncoming.sanitaryProducts.length === 0) &&
+      Array.isArray(cachedState?.sanitaryProducts) &&
+      cachedState.sanitaryProducts.length > 0
+    ) {
+      cloudIncoming.sanitaryProducts = cachedState.sanitaryProducts;
+      cloudIncoming.sanitaryProductsCleaned = false;
+      cloudIncoming.deletedSanitaryProductIds = [];
+    }
+
+    const prevJson = cachedState
+      ? JSON.stringify({
+          c: cachedState.classes,
+          v: cachedState.clinicVisits?.length,
+          s: cachedState.students?.length,
+          st: cachedState.staffMembers?.length,
+          stu: cachedState.staffUpdatedAt,
+          sp: cachedState.sanitaryProducts?.length,
+        })
+      : '';
     cachedState = mergeSchoolState(cachedState, cloudIncoming);
     if (cloudRev > cachedState.revision) {
       cachedState.revision = cloudRev;
     }
-    const nextJson = JSON.stringify({ c: cachedState.classes, v: cachedState.clinicVisits?.length, s: cachedState.students?.length, st: cachedState.staffMembers?.length, stu: cachedState.staffUpdatedAt });
+    const nextJson = JSON.stringify({
+      c: cachedState.classes,
+      v: cachedState.clinicVisits?.length,
+      s: cachedState.students?.length,
+      st: cachedState.staffMembers?.length,
+      stu: cachedState.staffUpdatedAt,
+      sp: cachedState.sanitaryProducts?.length,
+    });
     if (prevJson !== nextJson) {
       saveServerState(cachedState);
     }
@@ -734,12 +834,538 @@ async function pullStateFromCloudFirestore(force = false): Promise<boolean> {
 
 async function startServer() {
   const app = express();
-  const PORT = Number(process.env.PORT) || 3000;
+
+  // Determine port: strictly prioritize process.env.PORT (e.g. Cloud Run PORT=3000 / PORT=8080), with CLI arg fallback, defaulting to 3000
+  const portArgIndex = process.argv.indexOf('--port');
+  const cliPort = portArgIndex !== -1 ? Number(process.argv[portArgIndex + 1]) : null;
+  const envPort = process.env.PORT ? Number(process.env.PORT) : null;
+  const PORT = (envPort && !isNaN(envPort) && envPort > 0) ? envPort : (cliPort || 3000);
 
   app.use(express.json({ limit: '50mb' }));
 
   // Initial sync with Cloud Firestore on startup so cold-started containers immediately have the school's state
   pullStateFromCloudFirestore(true).catch(() => {});
+
+  // Helper to resolve base URL for setup/reset password links
+  const getRequestBaseUrl = (req: express.Request): string => {
+    const origin = req.headers.origin;
+    if (origin && typeof origin === 'string') return origin;
+    const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'http';
+    const host = (req.headers['x-forwarded-host'] as string) || req.headers.host || `localhost:${PORT}`;
+    return `${proto}://${host}`;
+  };
+
+  const setSessionCookie = (res: express.Response, token: string) => {
+    res.setHeader(
+      'Set-Cookie',
+      `thcs_dt_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400`
+    );
+  };
+
+  const clearSessionCookie = (res: express.Response) => {
+    res.setHeader(
+      'Set-Cookie',
+      'thcs_dt_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0'
+    );
+  };
+
+  // --- AUTHENTICATION & ACCOUNT MANAGEMENT ENDPOINTS ---
+
+  // 1. Login with Username/Email & Password (Bcrypt + Rate-limiting + Non-enumerating errors)
+  app.post('/api/auth/login', async (req, res) => {
+    try {
+      const { identifier, password } = req.body || {};
+      const ip =
+        (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
+        req.socket.remoteAddress ||
+        'unknown';
+
+      const result = await authStore.verifyLogin(String(identifier || ''), String(password || ''), ip);
+      if (!result.ok) {
+        res.status(result.status).json({ ok: false, error: result.error });
+        return;
+      }
+
+      const sessionToken = authStore.createSession(result.account.id, req);
+      setSessionCookie(res, sessionToken);
+
+      if (cachedState) {
+        cachedState.users = authStore.getSanitizedUsers();
+        saveServerState(cachedState);
+      }
+
+      res.json({
+        ok: true,
+        token: sessionToken,
+        user: sanitizeUserForClient(result.account),
+        mustChangePassword: Boolean(result.account.mustChangePassword),
+      });
+    } catch (err) {
+      console.error('Error in POST /api/auth/login:', err);
+      res.status(500).json({ ok: false, error: 'Lỗi máy chủ khi xử lý đăng nhập.' });
+    }
+  });
+
+  // 2. Login via Google OAuth (verifies against member accounts on server)
+  app.post('/api/auth/google', async (req, res) => {
+    try {
+      const { email, fullName } = req.body || {};
+      const cleanEmail = String(email || '').trim().toLowerCase();
+      if (!cleanEmail) {
+        res.status(400).json({ ok: false, error: 'Không nhận được địa chỉ Email từ Google.' });
+        return;
+      }
+
+      const account = authStore.findAccountByIdentifier(cleanEmail);
+      if (!account) {
+        res.status(403).json({
+          ok: false,
+          error: 'Email Google này chưa được cấp tài khoản trong hệ thống. Vui lòng liên hệ Quản trị viên để được tạo tài khoản.',
+        });
+        return;
+      }
+
+      if (account.status === 'inactive') {
+        res.status(403).json({
+          ok: false,
+          error: 'Tài khoản của bạn đang bị khóa bởi Quản trị viên.',
+        });
+        return;
+      }
+
+      if (fullName && (!account.fullName || account.fullName === 'Quản trị')) {
+        account.fullName = String(fullName).trim();
+      }
+      account.lastLoginAt = new Date().toISOString();
+      account.failedLoginAttempts = 0;
+      account.lockedUntil = null;
+      authStore.saveAccounts();
+
+      const sessionToken = authStore.createSession(account.id, req);
+      setSessionCookie(res, sessionToken);
+
+      res.json({
+        ok: true,
+        token: sessionToken,
+        user: sanitizeUserForClient(account),
+        mustChangePassword: Boolean(account.mustChangePassword),
+      });
+    } catch (err) {
+      console.error('Error in POST /api/auth/google:', err);
+      res.status(500).json({ ok: false, error: 'Lỗi xác thực tài khoản Google.' });
+    }
+  });
+
+  // 3. Logout & invalidate server session
+  app.post('/api/auth/logout', (req, res) => {
+    const rawToken = authStore.extractRawTokenFromRequest(req);
+    if (rawToken) {
+      authStore.revokeSessionToken(rawToken);
+    }
+    clearSessionCookie(res);
+    res.json({ ok: true });
+  });
+
+  // 4. Validate active session & fetch current user profile + permissions
+  app.get('/api/auth/me', (req, res) => {
+    const account = authStore.getAuthenticatedAccount(req);
+    if (!account) {
+      res.status(401).json({ ok: false, authenticated: false, error: 'Phiên đăng nhập đã hết hạn hoặc không hợp lệ.' });
+      return;
+    }
+    res.json({
+      ok: true,
+      authenticated: true,
+      user: sanitizeUserForClient(account),
+      mustChangePassword: Boolean(account.mustChangePassword),
+      smtpConfigured: authStore.isSmtpConfigured(),
+    });
+  });
+
+  // 5. Change own password (for logged-in users and mandatory first-login change)
+  app.post('/api/auth/change-password', async (req, res) => {
+    try {
+      const account = authStore.getAuthenticatedAccount(req);
+      if (!account) {
+        res.status(401).json({ ok: false, error: 'Vui lòng đăng nhập lại để đổi mật khẩu.' });
+        return;
+      }
+      const { currentPassword, newPassword } = req.body || {};
+      const result = await authStore.changeOwnPassword(
+        account,
+        String(currentPassword || ''),
+        String(newPassword || '')
+      );
+      if (!result.ok) {
+        res.status(400).json({ ok: false, error: result.error });
+        return;
+      }
+
+      // Keep current session alive, revoke other sessions
+      const currentRawToken = authStore.extractRawTokenFromRequest(req);
+      authStore.revokeAllUserSessions(account.id, currentRawToken || undefined);
+
+      if (cachedState) {
+        cachedState.users = authStore.getSanitizedUsers();
+        saveServerState(cachedState);
+      }
+
+      res.json({
+        ok: true,
+        user: sanitizeUserForClient(result.account),
+        message: 'Đã cập nhật mật khẩu mới thành công!',
+      });
+    } catch (err) {
+      console.error('Error in POST /api/auth/change-password:', err);
+      res.status(500).json({ ok: false, error: 'Lỗi máy chủ khi đổi mật khẩu.' });
+    }
+  });
+
+  // 6. Forgot password request (Non-enumerating response + time-limited single-use link)
+  app.post('/api/auth/forgot-password', async (req, res) => {
+    try {
+      const { identifier } = req.body || {};
+      const ip =
+        (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
+        req.socket.remoteAddress ||
+        'unknown';
+      const ipCheck = authStore.checkIpRateLimit(ip);
+      if (!ipCheck.allowed) {
+        res.status(429).json({
+          ok: false,
+          error: `Vui lòng thử lại sau ${ipCheck.retryAfterMinutes} phút.`,
+        });
+        return;
+      }
+
+      const account = authStore.findAccountByIdentifier(String(identifier || ''));
+      const baseUrl = getRequestBaseUrl(req);
+      let previewResetLink: string | null = null;
+      let sentViaSmtp = false;
+
+      if (account && account.status !== 'inactive') {
+        account.pendingResetRequestAt = new Date().toISOString();
+        const { link, expiresAt } = authStore.createSingleUseToken(account, 'reset', baseUrl);
+        const mailResult = await authStore.sendAuthLinkEmail({
+          to: account.email,
+          username: account.username,
+          fullName: account.fullName,
+          type: 'reset',
+          link,
+          expiresAt,
+        });
+        sentViaSmtp = mailResult.sentViaSmtp;
+        if (!authStore.isSmtpConfigured()) {
+          previewResetLink = link;
+        }
+        if (cachedState) {
+          cachedState.users = authStore.getSanitizedUsers();
+          saveServerState(cachedState);
+        }
+      } else {
+        authStore.recordIpFailedAttempt(ip);
+      }
+
+      // Non-enumerating safe response message
+      res.json({
+        ok: true,
+        smtpConfigured: authStore.isSmtpConfigured(),
+        sentViaSmtp,
+        previewResetLink,
+        message:
+          'Nếu thông tin tài khoản hợp lệ, yêu cầu đặt lại mật khẩu đã được ghi nhận và gửi liên kết đặt lại (hiệu lực 30 phút, chỉ dùng 1 lần).',
+      });
+    } catch (err) {
+      console.error('Error in POST /api/auth/forgot-password:', err);
+      res.status(500).json({ ok: false, error: 'Không thể xử lý yêu cầu lúc này.' });
+    }
+  });
+
+  // 7. Verify single-use password setup / reset token
+  app.get('/api/auth/verify-token', (req, res) => {
+    const token = String(req.query.token || '');
+    const result = authStore.verifyResetOrSetupToken(token);
+    if (!result.ok) {
+      res.status(400).json({ ok: false, valid: false, error: result.error });
+      return;
+    }
+    res.json({
+      ok: true,
+      valid: true,
+      tokenType: result.tokenType,
+      username: result.account.username,
+      fullName: result.account.fullName,
+      email: result.account.email,
+      expiresAt: result.account.resetTokenExpiresAt,
+    });
+  });
+
+  // 8. Complete password setup / reset using single-use token
+  app.post('/api/auth/complete-reset', async (req, res) => {
+    try {
+      const { token, newPassword } = req.body || {};
+      const result = await authStore.consumeTokenAndSetPassword(
+        String(token || ''),
+        String(newPassword || '')
+      );
+      if (!result.ok) {
+        res.status(400).json({ ok: false, error: result.error });
+        return;
+      }
+
+      const sessionToken = authStore.createSession(result.account.id, req);
+      setSessionCookie(res, sessionToken);
+
+      if (cachedState) {
+        cachedState.users = authStore.getSanitizedUsers();
+        saveServerState(cachedState);
+      }
+
+      res.json({
+        ok: true,
+        token: sessionToken,
+        user: sanitizeUserForClient(result.account),
+        message: 'Thiết lập mật khẩu thành công! Bạn đã được đăng nhập vào hệ thống.',
+      });
+    } catch (err) {
+      console.error('Error in POST /api/auth/complete-reset:', err);
+      res.status(500).json({ ok: false, error: 'Lỗi máy chủ khi đặt lại mật khẩu.' });
+    }
+  });
+
+  // --- ADMIN ACCOUNT MANAGEMENT ENDPOINTS (Server-side RBAC enforced) ---
+
+  app.get('/api/users', (req, res) => {
+    const actor = authStore.getAuthenticatedAccount(req);
+    if (!actor) {
+      res.status(401).json({ ok: false, error: 'Vui lòng đăng nhập để tiếp tục.' });
+      return;
+    }
+    res.json({
+      ok: true,
+      users: authStore.getSanitizedUsers(),
+      smtpConfigured: authStore.isSmtpConfigured(),
+      outbox: authStore.hasServerPermission(actor, 'admin_only') ? authStore.getOutbox().slice(0, 30) : [],
+    });
+  });
+
+  app.post('/api/users', async (req, res) => {
+    try {
+      const actor = authStore.getAuthenticatedAccount(req);
+      if (!authStore.hasServerPermission(actor, 'admin_only')) {
+        res.status(403).json({
+          ok: false,
+          error: 'Từ chối truy cập: Chỉ Quản trị viên mới có quyền tạo tài khoản thành viên.',
+        });
+        return;
+      }
+
+      const {
+        username,
+        fullName,
+        email,
+        phone,
+        title,
+        department,
+        role,
+        permissions,
+        setupMode,
+        tempPassword,
+      } = req.body || {};
+
+      const result = await authStore.createMemberAccount({
+        username: String(username || ''),
+        fullName: String(fullName || ''),
+        email: String(email || ''),
+        phone: String(phone || ''),
+        title: String(title || ''),
+        department: String(department || ''),
+        role: role || 'medic',
+        permissions,
+        setupMode: setupMode === 'temp_password' ? 'temp_password' : 'link',
+        tempPassword: tempPassword ? String(tempPassword) : undefined,
+        baseUrl: getRequestBaseUrl(req),
+      });
+
+      if (!result.ok) {
+        res.status(400).json({ ok: false, error: result.error });
+        return;
+      }
+
+      if (cachedState) {
+        cachedState.users = authStore.getSanitizedUsers();
+        saveServerState(cachedState);
+        pushStateToCloudFirestore(cachedState, false).catch(() => {});
+      }
+
+      res.json({
+        ok: true,
+        user: result.user,
+        users: authStore.getSanitizedUsers(),
+        setupLink: result.setupLink,
+        expiresAt: result.expiresAt,
+        sentViaSmtp: result.sentViaSmtp,
+        smtpConfigured: authStore.isSmtpConfigured(),
+      });
+    } catch (err) {
+      console.error('Error in POST /api/users:', err);
+      res.status(500).json({ ok: false, error: 'Lỗi máy chủ khi tạo tài khoản.' });
+    }
+  });
+
+  app.put('/api/users/:id', (req, res) => {
+    try {
+      const actor = authStore.getAuthenticatedAccount(req);
+      if (!authStore.hasServerPermission(actor, 'admin_only')) {
+        res.status(403).json({
+          ok: false,
+          error: 'Từ chối truy cập: Chỉ Quản trị viên mới có quyền cập nhật phân quyền tài khoản.',
+        });
+        return;
+      }
+
+      const targetId = req.params.id;
+      const result = authStore.updateMemberAccount(targetId, req.body || {});
+      if (!result.ok) {
+        res.status(400).json({ ok: false, error: result.error });
+        return;
+      }
+
+      if (cachedState) {
+        cachedState.users = authStore.getSanitizedUsers();
+        saveServerState(cachedState);
+        pushStateToCloudFirestore(cachedState, false).catch(() => {});
+      }
+
+      res.json({
+        ok: true,
+        user: result.user,
+        users: authStore.getSanitizedUsers(),
+      });
+    } catch (err) {
+      console.error('Error in PUT /api/users/:id:', err);
+      res.status(500).json({ ok: false, error: 'Lỗi máy chủ khi cập nhật tài khoản.' });
+    }
+  });
+
+  app.post('/api/users/:id/toggle-lock', (req, res) => {
+    try {
+      const actor = authStore.getAuthenticatedAccount(req);
+      if (!actor || !authStore.hasServerPermission(actor, 'admin_only')) {
+        res.status(403).json({
+          ok: false,
+          error: 'Từ chối truy cập: Chỉ Quản trị viên mới có quyền khóa/mở khóa tài khoản.',
+        });
+        return;
+      }
+
+      const targetId = req.params.id;
+      const { lock } = req.body || {};
+      const result = authStore.toggleLockAccount(
+        targetId,
+        actor.id,
+        typeof lock === 'boolean' ? lock : undefined
+      );
+      if (!result.ok) {
+        res.status(400).json({ ok: false, error: result.error });
+        return;
+      }
+
+      if (cachedState) {
+        cachedState.users = authStore.getSanitizedUsers();
+        saveServerState(cachedState);
+        pushStateToCloudFirestore(cachedState, false).catch(() => {});
+      }
+
+      res.json({
+        ok: true,
+        user: result.user,
+        users: authStore.getSanitizedUsers(),
+      });
+    } catch (err) {
+      console.error('Error in POST /api/users/:id/toggle-lock:', err);
+      res.status(500).json({ ok: false, error: 'Lỗi máy chủ khi khóa/mở khóa tài khoản.' });
+    }
+  });
+
+  app.post('/api/users/:id/reset-password', async (req, res) => {
+    try {
+      const actor = authStore.getAuthenticatedAccount(req);
+      if (!actor || !authStore.hasServerPermission(actor, 'admin_only')) {
+        res.status(403).json({
+          ok: false,
+          error: 'Từ chối truy cập: Chỉ Quản trị viên mới có quyền đặt lại mật khẩu thành viên.',
+        });
+        return;
+      }
+
+      const targetId = req.params.id;
+      const { mode, tempPassword } = req.body || {};
+      const result = await authStore.adminResetPassword({
+        targetId,
+        mode: mode === 'temp_password' ? 'temp_password' : 'link',
+        tempPassword: tempPassword ? String(tempPassword) : undefined,
+        baseUrl: getRequestBaseUrl(req),
+      });
+
+      if (!result.ok) {
+        res.status(400).json({ ok: false, error: result.error });
+        return;
+      }
+
+      if (cachedState) {
+        cachedState.users = authStore.getSanitizedUsers();
+        saveServerState(cachedState);
+      }
+
+      res.json({
+        ok: true,
+        user: result.user,
+        users: authStore.getSanitizedUsers(),
+        resetLink: result.resetLink,
+        expiresAt: result.expiresAt,
+        sentViaSmtp: result.sentViaSmtp,
+        smtpConfigured: authStore.isSmtpConfigured(),
+      });
+    } catch (err) {
+      console.error('Error in POST /api/users/:id/reset-password:', err);
+      res.status(500).json({ ok: false, error: 'Lỗi máy chủ khi đặt lại mật khẩu.' });
+    }
+  });
+
+  app.delete('/api/users/:id', (req, res) => {
+    try {
+      const actor = authStore.getAuthenticatedAccount(req);
+      if (!actor || !authStore.hasServerPermission(actor, 'admin_only')) {
+        res.status(403).json({
+          ok: false,
+          error: 'Từ chối truy cập: Chỉ Quản trị viên mới có quyền xóa tài khoản.',
+        });
+        return;
+      }
+
+      const targetId = req.params.id;
+      const result = authStore.deleteMemberAccount(targetId, actor.id);
+      if (!result.ok) {
+        res.status(400).json({ ok: false, error: result.error });
+        return;
+      }
+
+      if (cachedState) {
+        cachedState.users = authStore.getSanitizedUsers();
+        saveServerState(cachedState);
+        pushStateToCloudFirestore(cachedState, false).catch(() => {});
+      }
+
+      res.json({
+        ok: true,
+        users: authStore.getSanitizedUsers(),
+      });
+    } catch (err) {
+      console.error('Error in DELETE /api/users/:id:', err);
+      res.status(500).json({ ok: false, error: 'Lỗi máy chủ khi xóa tài khoản.' });
+    }
+  });
 
   // Lightweight health & revision check for multi-computer real-time sync
   app.get('/api/health', async (_req, res) => {
@@ -769,6 +1395,9 @@ async function startServer() {
       cachedState = loadServerState();
     }
     await pullStateFromCloudFirestore(false);
+    if (cachedState) {
+      cachedState.users = authStore.getSanitizedUsers();
+    }
     res.json({
       ok: true,
       hasData: Boolean(cachedState),
@@ -776,18 +1405,60 @@ async function startServer() {
     });
   });
 
-  // Merge and save full or partial school state from a client computer
+  // Merge and save full or partial school state from a client computer (Enforces Server-Side RBAC)
   app.post('/api/school-state', async (req, res) => {
     try {
-      const incoming = req.body;
-      if (!incoming || typeof incoming !== 'object') {
+      const incomingRaw = req.body;
+      if (!incomingRaw || typeof incomingRaw !== 'object') {
         res.status(400).json({ ok: false, error: 'Invalid payload' });
         return;
       }
       if (!cachedState) {
         cachedState = loadServerState();
       }
+
+      // Server-side permission enforcement when session token is present
+      const actor = authStore.getAuthenticatedAccount(req);
+      const incoming = { ...incomingRaw };
+      if (actor) {
+        const canInventory =
+          authStore.hasServerPermission(actor, 'canManageMedicine') ||
+          authStore.hasServerPermission(actor, 'canManageTransactions') ||
+          authStore.hasServerPermission(actor, 'canManageInventoryCheck');
+        if (!canInventory && cachedState) {
+          delete incoming.medicines;
+          delete incoming.batches;
+          delete incoming.transactions;
+          delete incoming.supplies;
+          delete incoming.suppliers;
+          delete incoming.inventoryChecks;
+          delete incoming.disposals;
+          delete incoming.deletedTxIds;
+          delete incoming.inventoryUpdatedAt;
+        }
+        if (!authStore.hasServerPermission(actor, 'canManageClinicVisits') && cachedState) {
+          delete incoming.clinicVisits;
+          delete incoming.usageRecords;
+          delete incoming.deletedVisitIds;
+        }
+        if (!authStore.hasServerPermission(actor, 'canManageStudents') && cachedState) {
+          delete incoming.students;
+          delete incoming.healthProfiles;
+          delete incoming.classes;
+          delete incoming.healthEvents;
+          delete incoming.healthCheckups;
+          delete incoming.deletedStudentIds;
+          delete incoming.deletedClassIds;
+          delete incoming.deletedEventIds;
+          delete incoming.deletedCheckupIds;
+        }
+        if (!authStore.hasServerPermission(actor, 'canManageSettings') && cachedState) {
+          delete incoming.settings;
+        }
+      }
+
       cachedState = mergeSchoolState(cachedState, incoming);
+      cachedState.users = authStore.getSanitizedUsers();
       saveServerState(cachedState);
       // Persist to Cloud Firestore in background so client receives an immediate response (<10ms)
       pushStateToCloudFirestore(cachedState, false).catch((err) => {
@@ -828,6 +1499,19 @@ async function startServer() {
 
   app.post('/api/staff-members', async (req, res) => {
     try {
+      const actor = authStore.getAuthenticatedAccount(req);
+      if (
+        actor &&
+        !authStore.hasServerPermission(actor, 'canManageStudents') &&
+        !authStore.hasServerPermission(actor, 'canManageClinicVisits') &&
+        !authStore.hasServerPermission(actor, 'admin_only')
+      ) {
+        res.status(403).json({
+          ok: false,
+          error: 'Tài khoản của bạn không có quyền chỉnh sửa danh sách cán bộ/nhân viên.',
+        });
+        return;
+      }
       const { action, staff, id, ids, staffMembers, replaceAll, oldIds } = req.body || {};
       if (!cachedState) {
         cachedState = loadServerState() || {};
@@ -906,6 +1590,14 @@ async function startServer() {
   // Dedicated instant endpoint for saving/updating/deleting a clinic visit + deducted stock
   app.post('/api/clinic-visit', async (req, res) => {
     try {
+      const actor = authStore.getAuthenticatedAccount(req);
+      if (actor && !authStore.hasServerPermission(actor, 'canManageClinicVisits')) {
+        res.status(403).json({
+          ok: false,
+          error: 'Tài khoản của bạn không có quyền thao tác với Sổ tiếp nhận khám & cấp thuốc.',
+        });
+        return;
+      }
       const { action, visit, visitId, batches, medicines, transactions, supplies, healthProfile } = req.body || {};
       if (!cachedState) {
         cachedState = loadServerState() || {};
@@ -969,13 +1661,17 @@ async function startServer() {
     }
   });
 
+  app.all('/api/*', (_req, res) => {
+    res.status(404).json({ ok: false, error: 'Endpoint API không tồn tại.' });
+  });
+
   const distPath = path.join(__dirname, 'dist');
   const isProd = process.env.NODE_ENV === 'production';
 
   if (!isProd) {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: { middlewareMode: true, hmr: false },
       appType: 'spa',
     });
     app.use(vite.middlewares);
@@ -987,14 +1683,18 @@ async function startServer() {
   } else {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: { middlewareMode: true, hmr: false },
       appType: 'spa',
     });
     app.use(vite.middlewares);
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`School Health Server running on http://0.0.0.0:${PORT}`);
+  });
+
+  server.on('error', (err: any) => {
+    console.error('Server listen error:', err);
   });
 }
 

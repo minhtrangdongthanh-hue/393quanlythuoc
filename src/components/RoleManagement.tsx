@@ -6,11 +6,21 @@ import {
   CheckCircle2,
   AlertTriangle,
   Lock,
+  Unlock,
   Check,
   X,
   Info,
   Sliders,
-  ArrowRightLeft,
+  UserPlus,
+  KeyRound,
+  Edit3,
+  Trash2,
+  Copy,
+  Mail,
+  User as UserIcon,
+  Clock,
+  Link2,
+  ShieldAlert,
 } from 'lucide-react';
 import { db, getRoleLabel } from '../services/db';
 import { User as UserType, UserRole, UserPermission } from '../types';
@@ -23,8 +33,6 @@ export interface PermissionConfigItem {
   group: 'Chuyên môn Y tế & Dược học đường' | 'Quản trị, Phê duyệt & Bảo mật hệ thống';
   adminDefault: boolean;
   medicDefault: boolean;
-  adminScope: string;
-  medicScope: string;
 }
 
 const PERMISSION_CONFIG: PermissionConfigItem[] = [
@@ -37,8 +45,6 @@ const PERMISSION_CONFIG: PermissionConfigItem[] = [
     group: 'Chuyên môn Y tế & Dược học đường',
     adminDefault: true,
     medicDefault: true,
-    adminScope: 'Toàn quyền giám sát, tra cứu & điều chỉnh hồ sơ ca khám',
-    medicScope: 'Trực tiếp tiếp nhận học sinh, khám sơ cứu & cấp phát thuốc hàng ngày',
   },
   {
     key: 'canManageStudents',
@@ -49,20 +55,16 @@ const PERMISSION_CONFIG: PermissionConfigItem[] = [
     group: 'Chuyên môn Y tế & Dược học đường',
     adminDefault: true,
     medicDefault: true,
-    adminScope: 'Quản trị, đồng bộ danh sách học sinh & hồ sơ toàn trường',
-    medicScope: 'Cập nhật hồ sơ sức khỏe, theo dõi bệnh nền & nhập kết quả khám định kỳ',
   },
   {
     key: 'canManageMedicine',
     shortLabel: 'Danh mục thuốc & Vật tư',
     label: '3. Quản lý Danh mục Thuốc & Vật tư y tế thiết yếu',
     description:
-      'Quản lý danh mục 30 thuốc/vật tư chuẩn, quy cách đóng gói, nồng độ/hàm lượng, định mức tồn tối thiểu và vị trí tủ thuốc.',
+      'Quản lý danh mục thuốc/vật tư chuẩn, quy cách đóng gói, nồng độ/hàm lượng, định mức tồn tối thiểu và vị trí tủ thuốc.',
     group: 'Chuyên môn Y tế & Dược học đường',
     adminDefault: true,
     medicDefault: true,
-    adminScope: 'Toàn quyền cấu hình danh mục thuốc & vật tư chuẩn',
-    medicScope: 'Cập nhật thông tin thuốc, lô thuốc, hạn dùng & vật tư sơ cứu',
   },
   {
     key: 'canManageTransactions',
@@ -73,8 +75,6 @@ const PERMISSION_CONFIG: PermissionConfigItem[] = [
     group: 'Chuyên môn Y tế & Dược học đường',
     adminDefault: true,
     medicDefault: true,
-    adminScope: 'Toàn quyền lập phiếu, đối soát & hủy phiếu giao dịch khi cần',
-    medicScope: 'Trực tiếp lập phiếu nhập thuốc và xuất cấp phát chuyên môn',
   },
   {
     key: 'canManageInventoryCheck',
@@ -85,8 +85,6 @@ const PERMISSION_CONFIG: PermissionConfigItem[] = [
     group: 'Chuyên môn Y tế & Dược học đường',
     adminDefault: true,
     medicDefault: true,
-    adminScope: 'Toàn quyền tổ chức kiểm kê & rà soát chênh lệch tồn kho',
-    medicScope: 'Kiểm đếm thực tế tủ thuốc & lập biên bản trình Quản trị phê duyệt',
   },
   {
     key: 'canViewReports',
@@ -97,8 +95,6 @@ const PERMISSION_CONFIG: PermissionConfigItem[] = [
     group: 'Chuyên môn Y tế & Dược học đường',
     adminDefault: true,
     medicDefault: true,
-    adminScope: 'Xem, xuất Excel & kiểm duyệt toàn bộ báo cáo thống kê',
-    medicScope: 'Lập, kết xuất & in ấn các sổ theo dõi chuyên môn A4',
   },
   {
     key: 'canApproveAudits',
@@ -109,146 +105,381 @@ const PERMISSION_CONFIG: PermissionConfigItem[] = [
     group: 'Quản trị, Phê duyệt & Bảo mật hệ thống',
     adminDefault: true,
     medicDefault: false,
-    adminScope: 'ĐỘC QUYỀN QUẢN TRỊ: Ký duyệt kiểm kê, chốt kho & duyệt hủy thuốc',
-    medicScope: 'Không có quyền tự phê duyệt (Chỉ lập biên bản gửi chờ duyệt)',
   },
   {
     key: 'canManageSettings',
-    shortLabel: 'Quản trị hệ thống & Sao lưu',
-    label: '8. Quản trị hệ thống, Phân quyền, Nhật ký Audit & Sao lưu / Khôi phục dữ liệu',
+    shortLabel: 'Quản trị hệ thống & Tài khoản',
+    label: '8. Quản trị hệ thống, Quản lý tài khoản, Phân quyền & Sao lưu dữ liệu',
     description:
-      'Cấu hình thông tin trường học, điều chỉnh ma trận phân quyền, kiểm tra nhật ký kiểm toán và sao lưu / khôi phục cơ sở dữ liệu.',
+      'Tạo và khóa tài khoản thành viên, điều chỉnh phân quyền, xem nhật ký kiểm toán (Audit Log) và sao lưu / khôi phục dữ liệu.',
     group: 'Quản trị, Phê duyệt & Bảo mật hệ thống',
     adminDefault: true,
     medicDefault: false,
-    adminScope: 'ĐỘC QUYỀN QUẢN TRỊ: Toàn quyền cấu hình hệ thống, phân quyền & sao lưu',
-    medicScope: 'Không có quyền can thiệp cài đặt hệ thống & dữ liệu gốc',
   },
 ];
 
+const getDefaultPermsForRole = (role: UserRole): UserPermission => ({
+  canManageMedicine: true,
+  canManageTransactions: true,
+  canManageClinicVisits: true,
+  canManageStudents: true,
+  canManageInventoryCheck: true,
+  canViewReports: true,
+  canApproveAudits: role === 'admin' || role === 'bgh',
+  canManageSettings: role === 'admin' || role === 'bgh',
+});
+
 export const RoleManagement: React.FC = () => {
-  const [rolesList, setRolesList] = useState<UserType[]>(() => db.getUsers());
+  const [users, setUsers] = useState<UserType[]>(() => db.getUsers());
   const [currentUser, setCurrentUser] = useState<UserType>(() => db.getCurrentUser());
+  const [smtpConfigured, setSmtpConfigured] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Selected user for granular permission editing
+  const [selectedUserId, setSelectedUserId] = useState<string>(() => db.getCurrentUser()?.id || 'role-admin');
+
+  // Create / Edit Member Modal
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<UserType | null>(null);
+  const [formFullName, setFormFullName] = useState('');
+  const [formUsername, setFormUsername] = useState('');
+  const [formEmail, setFormEmail] = useState('');
+  const [formPhone, setFormPhone] = useState('');
+  const [formTitle, setFormTitle] = useState('');
+  const [formDepartment, setFormDepartment] = useState('');
+  const [formRole, setFormRole] = useState<UserRole>('medic');
+  const [formPermissions, setFormPermissions] = useState<UserPermission>(() => getDefaultPermsForRole('medic'));
+  const [formSetupMode, setFormSetupMode] = useState<'link' | 'temp_password'>('link');
+  const [formTempPassword, setFormTempPassword] = useState('');
+
+  // Reset Password Modal
+  const [resetTargetUser, setResetTargetUser] = useState<UserType | null>(null);
+  const [resetMode, setResetMode] = useState<'link' | 'temp_password'>('link');
+  const [resetTempPassword, setResetTempPassword] = useState('');
+
+  // Generated One-Time Link / Handover Result Modal
+  const [generatedLinkModal, setGeneratedLinkModal] = useState<{
+    title: string;
+    username: string;
+    fullName: string;
+    email: string;
+    link: string;
+    expiresAt: string;
+    sentViaSmtp: boolean;
+    hasTempPassword?: boolean;
+  } | null>(null);
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  // Confirm delete state
+  const [confirmDeleteUser, setConfirmDeleteUser] = useState<UserType | null>(null);
+
+  const showSuccess = (msg: string) => {
+    setSuccessMsg(msg);
+    setErrorMsg(null);
+    setTimeout(() => setSuccessMsg(null), 4500);
+  };
+
+  const showError = (msg: string) => {
+    setErrorMsg(msg);
+    setTimeout(() => setErrorMsg(null), 5000);
+  };
+
+  const fetchUsersFromServer = async () => {
+    try {
+      const res = await fetch('/api/users', { headers: db.getAuthHeaders() });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.ok && Array.isArray(data.users)) {
+        db.setUsersList(data.users);
+        setUsers(data.users);
+        setSmtpConfigured(Boolean(data.smtpConfigured));
+      }
+    } catch {
+      // ignore offline
+    }
+  };
+
   useEffect(() => {
+    fetchUsersFromServer();
     const unsubscribe = db.subscribe(() => {
-      setRolesList(db.getUsers());
+      setUsers(db.getUsers());
       setCurrentUser(db.getCurrentUser());
     });
     return () => unsubscribe();
   }, []);
 
-  const showSuccess = (msg: string) => {
-    setSuccessMsg(msg);
+  const selectedUser =
+    users.find((u) => u.id === selectedUserId) || users[0] || currentUser;
+
+  const generateRandomStrongPassword = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+    const nums = '23456789';
+    let pass = 'Yte@';
+    for (let i = 0; i < 4; i++) {
+      pass += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    for (let i = 0; i < 3; i++) {
+      pass += nums.charAt(Math.floor(Math.random() * nums.length));
+    }
+    return pass;
+  };
+
+  const handleOpenCreateModal = () => {
+    setEditingUser(null);
+    setFormFullName('');
+    setFormUsername('');
+    setFormEmail('');
+    setFormPhone('');
+    setFormTitle('Nhân viên Y tế');
+    setFormDepartment('Phòng Y tế Học đường');
+    setFormRole('medic');
+    setFormPermissions(getDefaultPermsForRole('medic'));
+    setFormSetupMode('link');
+    setFormTempPassword(generateRandomStrongPassword());
+    setIsCreateModalOpen(true);
+  };
+
+  const handleOpenEditModal = (u: UserType) => {
+    setEditingUser(u);
+    setFormFullName(u.fullName || '');
+    setFormUsername(u.username || '');
+    setFormEmail(u.email || '');
+    setFormPhone(u.phone || '');
+    setFormTitle(u.title || '');
+    setFormDepartment(u.department || '');
+    setFormRole(u.role);
+    setFormPermissions({
+      ...getDefaultPermsForRole(u.role),
+      ...(u.permissions || {}),
+    });
+    setIsCreateModalOpen(true);
+  };
+
+  const handleSaveMember = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
     setErrorMsg(null);
-    setTimeout(() => setSuccessMsg(null), 3500);
+
+    try {
+      if (editingUser) {
+        const res = await fetch(`/api/users/${encodeURIComponent(editingUser.id)}`, {
+          method: 'PUT',
+          headers: db.getAuthHeaders(),
+          body: JSON.stringify({
+            fullName: formFullName,
+            username: formUsername,
+            email: formEmail,
+            phone: formPhone,
+            title: formTitle,
+            department: formDepartment,
+            role: formRole,
+            permissions: formPermissions,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          showError(data.error || 'Không thể cập nhật thông tin tài khoản.');
+          return;
+        }
+        db.setUsersList(data.users);
+        setUsers(data.users);
+        setIsCreateModalOpen(false);
+        db.logAudit(
+          'Cập nhật tài khoản thành viên',
+          `Cập nhật thông tin & phân quyền cho ${data.user.fullName} (${data.user.username})`
+        );
+        showSuccess(`Đã cập nhật tài khoản "${data.user.fullName}" thành công!`);
+      } else {
+        const res = await fetch('/api/users', {
+          method: 'POST',
+          headers: db.getAuthHeaders(),
+          body: JSON.stringify({
+            fullName: formFullName,
+            username: formUsername,
+            email: formEmail,
+            phone: formPhone,
+            title: formTitle,
+            department: formDepartment,
+            role: formRole,
+            permissions: formPermissions,
+            setupMode: formSetupMode,
+            tempPassword: formSetupMode === 'temp_password' ? formTempPassword : undefined,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          showError(data.error || 'Không thể tạo tài khoản mới.');
+          return;
+        }
+        db.setUsersList(data.users);
+        setUsers(data.users);
+        setSelectedUserId(data.user.id);
+        setIsCreateModalOpen(false);
+        db.logAudit(
+          'Tạo tài khoản thành viên mới',
+          `Tạo tài khoản: ${data.user.fullName} (${data.user.username}) - Vai trò: ${getRoleLabel(data.user.role)}`
+        );
+
+        setGeneratedLinkModal({
+          title: 'Đã tạo tài khoản thành viên thành công',
+          username: data.user.username,
+          fullName: data.user.fullName,
+          email: data.user.email,
+          link: data.setupLink,
+          expiresAt: data.expiresAt,
+          sentViaSmtp: Boolean(data.sentViaSmtp),
+          hasTempPassword: formSetupMode === 'temp_password',
+        });
+      }
+    } catch {
+      showError('Lỗi kết nối máy chủ khi lưu tài khoản.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const adminRoleProfile =
-    rolesList.find((u) => u.role === 'admin') || {
-      id: 'role-admin',
-      username: 'quantri',
-      fullName: 'Quản trị',
-      role: 'admin' as UserRole,
-      permissions: {
-        canManageMedicine: true,
-        canManageTransactions: true,
-        canManageClinicVisits: true,
-        canManageStudents: true,
-        canManageInventoryCheck: true,
-        canViewReports: true,
-        canManageSettings: true,
-        canApproveAudits: true,
-      },
-    };
-
-  const medicRoleProfile =
-    rolesList.find((u) => u.role === 'medic') || {
-      id: 'role-medic',
-      username: 'nhanvien_yte',
-      fullName: 'Nhân viên Y tế',
-      role: 'medic' as UserRole,
-      permissions: {
-        canManageMedicine: true,
-        canManageTransactions: true,
-        canManageClinicVisits: true,
-        canManageStudents: true,
-        canManageInventoryCheck: true,
-        canViewReports: true,
-        canManageSettings: false,
-        canApproveAudits: false,
-      },
-    };
-
-  const activeRole: 'admin' | 'medic' =
-    currentUser?.role === 'admin' || currentUser?.role === 'bgh' ? 'admin' : 'medic';
-
-  const handleSwitchTaskRole = (targetRole: 'admin' | 'medic') => {
-    db.setCurrentUserRole(targetRole);
-    setRolesList(db.getUsers());
-    setCurrentUser(db.getCurrentUser());
-    showSuccess(
-      `Đã chuyển sang nhiệm vụ: ${
-        targetRole === 'admin' ? 'Quản trị (Toàn quyền hệ thống)' : 'Nhân viên Y tế (Chuyên môn Phòng Y tế)'
-      }`
-    );
+  const handleToggleLockUser = async (target: UserType) => {
+    setLoading(true);
+    try {
+      const isCurrentlyActive = target.status === 'active';
+      const res = await fetch(`/api/users/${encodeURIComponent(target.id)}/toggle-lock`, {
+        method: 'POST',
+        headers: db.getAuthHeaders(),
+        body: JSON.stringify({ lock: isCurrentlyActive }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        showError(data.error || 'Không thể thay đổi trạng thái khóa tài khoản.');
+        return;
+      }
+      db.setUsersList(data.users);
+      setUsers(data.users);
+      db.logAudit(
+        isCurrentlyActive ? 'Khóa tài khoản thành viên' : 'Mở khóa tài khoản thành viên',
+        `${isCurrentlyActive ? 'Khóa' : 'Mở khóa'} tài khoản ${target.fullName} (${target.username})`
+      );
+      showSuccess(
+        `Đã ${isCurrentlyActive ? 'KHÓA' : 'MỞ KHÓA'} tài khoản "${target.fullName}" (${target.username}).`
+      );
+    } catch {
+      showError('Lỗi kết nối máy chủ.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleTogglePermission = (
-    role: 'admin' | 'medic',
+  const handleAdminResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetTargetUser) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/users/${encodeURIComponent(resetTargetUser.id)}/reset-password`, {
+        method: 'POST',
+        headers: db.getAuthHeaders(),
+        body: JSON.stringify({
+          mode: resetMode,
+          tempPassword: resetMode === 'temp_password' ? resetTempPassword : undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        showError(data.error || 'Không thể đặt lại mật khẩu.');
+        return;
+      }
+      db.setUsersList(data.users);
+      setUsers(data.users);
+      db.logAudit(
+        'Hỗ trợ đặt lại mật khẩu',
+        `Cấp lại mật khẩu / liên kết đặt lại cho tài khoản ${resetTargetUser.fullName} (${resetTargetUser.username})`
+      );
+      const target = resetTargetUser;
+      setResetTargetUser(null);
+      setGeneratedLinkModal({
+        title: 'Đã tạo liên kết đặt lại mật khẩu (1 lần)',
+        username: target.username,
+        fullName: target.fullName,
+        email: target.email || '',
+        link: data.resetLink,
+        expiresAt: data.expiresAt,
+        sentViaSmtp: Boolean(data.sentViaSmtp),
+        hasTempPassword: resetMode === 'temp_password',
+      });
+    } catch {
+      showError('Lỗi kết nối máy chủ khi đặt lại mật khẩu.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteUser = async (target: UserType) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/users/${encodeURIComponent(target.id)}`, {
+        method: 'DELETE',
+        headers: db.getAuthHeaders(),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        showError(data.error || 'Không thể xóa tài khoản.');
+        return;
+      }
+      db.setUsersList(data.users);
+      setUsers(data.users);
+      setConfirmDeleteUser(null);
+      if (selectedUserId === target.id && data.users.length > 0) {
+        setSelectedUserId(data.users[0].id);
+      }
+      db.logAudit('Xóa tài khoản thành viên', `Đã xóa tài khoản ${target.fullName} (${target.username})`);
+      showSuccess(`Đã xóa tài khoản "${target.fullName}".`);
+    } catch {
+      showError('Lỗi kết nối máy chủ khi xóa tài khoản.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleToggleUserPermission = async (
+    target: UserType,
     permKey: keyof UserPermission,
-    currentVal: boolean,
     label: string
   ) => {
-    if (role === 'admin' && (permKey === 'canManageSettings' || permKey === 'canApproveAudits') && currentVal) {
-      setErrorMsg('Nhiệm vụ Quản trị luôn phải giữ quyền Quản trị hệ thống và Phê duyệt để đảm bảo an toàn.');
-      setTimeout(() => setErrorMsg(null), 4000);
-      return;
+    const basePerms = getDefaultPermsForRole(target.role);
+    const currentPerms: UserPermission = {
+      ...basePerms,
+      ...(target.permissions || {}),
+    };
+    const nextVal = !currentPerms[permKey];
+    const updatedPerms: UserPermission = {
+      ...currentPerms,
+      [permKey]: nextVal,
+    };
+
+    try {
+      const res = await fetch(`/api/users/${encodeURIComponent(target.id)}`, {
+        method: 'PUT',
+        headers: db.getAuthHeaders(),
+        body: JSON.stringify({ permissions: updatedPerms }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        showError(data.error || 'Không thể cập nhật quyền.');
+        return;
+      }
+      db.setUsersList(data.users);
+      setUsers(data.users);
+      db.logAudit(
+        'Cập nhật phân quyền thành viên',
+        `${nextVal ? 'Cấp' : 'Thu hồi'} quyền "${label}" cho tài khoản ${target.fullName} (${target.username})`
+      );
+      showSuccess(
+        `Đã ${nextVal ? 'CẤP' : 'THU HỒI'} quyền "${label}" đối với thành viên ${target.fullName}.`
+      );
+    } catch {
+      showError('Lỗi kết nối máy chủ khi cập nhật phân quyền.');
     }
-    const nextVal = !currentVal;
-    db.toggleRoleGroupPermission(role, permKey, nextVal);
-    setRolesList(db.getUsers());
-    setCurrentUser(db.getCurrentUser());
-    showSuccess(
-      `Đã ${nextVal ? 'CẤP' : 'THU HỒI'} quyền "${label}" đối với nhiệm vụ ${getRoleLabel(role)}.`
-    );
   };
-
-  const handleResetStandardPermissions = () => {
-    db.clearAllPersonnelKeepTwoRoles();
-    setRolesList(db.getUsers());
-    setCurrentUser(db.getCurrentUser());
-    showSuccess(
-      'Đã chuẩn hóa phân quyền: Xóa toàn bộ nhân sự cá nhân, chỉ giữ lại 2 nhiệm vụ (Quản trị & Nhân viên Y tế) với phân quyền chuẩn!'
-    );
-  };
-
-  const adminPerms = adminRoleProfile.permissions || {
-    canManageMedicine: true,
-    canManageTransactions: true,
-    canManageClinicVisits: true,
-    canManageStudents: true,
-    canManageInventoryCheck: true,
-    canViewReports: true,
-    canManageSettings: true,
-    canApproveAudits: true,
-  };
-
-  const medicPerms = medicRoleProfile.permissions || {
-    canManageMedicine: true,
-    canManageTransactions: true,
-    canManageClinicVisits: true,
-    canManageStudents: true,
-    canManageInventoryCheck: true,
-    canViewReports: true,
-    canManageSettings: false,
-    canApproveAudits: false,
-  };
-
-  const adminGrantedCount = PERMISSION_CONFIG.filter((p) => !!adminPerms[p.key]).length;
-  const medicGrantedCount = PERMISSION_CONFIG.filter((p) => !!medicPerms[p.key]).length;
 
   return (
     <div className="space-y-6">
@@ -277,278 +508,72 @@ export const RoleManagement: React.FC = () => {
         </div>
       )}
 
-      {/* Top Banner: Active Task Role Switcher (Only 2 Task Roles: Quản trị & Nhân viên Y tế) */}
+      {/* Top Banner: Member Account & Security Summary */}
       <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-5 rounded-2xl shadow-sm border border-slate-800">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="flex items-center gap-3.5">
-            <div
-              className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 border ${
-                activeRole === 'admin'
-                  ? 'bg-indigo-500/20 border-indigo-400/40 text-indigo-300'
-                  : 'bg-emerald-500/20 border-emerald-400/40 text-emerald-300'
-              }`}
-            >
-              {activeRole === 'admin' ? (
-                <ShieldCheck className="w-6 h-6" />
-              ) : (
-                <Stethoscope className="w-6 h-6" />
-              )}
+            <div className="w-12 h-12 rounded-2xl bg-indigo-500/20 border border-indigo-400/40 text-indigo-300 flex items-center justify-center shrink-0">
+              <ShieldCheck className="w-6 h-6" />
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs text-slate-300 font-medium">Nhiệm vụ đang làm việc:</span>
-                <span
-                  className={`px-3 py-0.5 rounded-full text-xs font-extrabold uppercase tracking-wide border ${
-                    activeRole === 'admin'
-                      ? 'bg-indigo-500/30 text-indigo-200 border-indigo-400/50'
-                      : 'bg-emerald-500/30 text-emerald-200 border-emerald-400/50'
-                  }`}
-                >
-                  {activeRole === 'admin' ? '1. QUẢN TRỊ' : '2. NHÂN VIÊN Y TẾ'}
+                <span className="text-sm font-black uppercase tracking-wide text-white">
+                  Quản Lý Tài Khoản Thành Viên & Phân Quyền Bảo Mật (RBAC)
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/40">
+                  Mã hóa Bcrypt • Xác thực Máy chủ
                 </span>
               </div>
               <p className="text-xs text-slate-300 mt-1">
-                {activeRole === 'admin'
-                  ? 'Toàn quyền quản trị hệ thống, phê duyệt kiểm kê/tiêu hủy thuốc, cấu hình phân quyền & sao lưu dữ liệu (8/8 quyền).'
-                  : 'Thực hiện nghiệp vụ chuyên môn Phòng Y tế: Tiếp nhận học sinh, cân đối thuốc theo cân nặng, nhập xuất kho FEFO & báo cáo (6/8 quyền).'}
+                Mỗi thành viên có tài khoản riêng (Tên đăng nhập/Email & Mật khẩu băm Bcrypt). Quản trị viên có thể tạo tài khoản, phân quyền chi tiết, khóa/mở khóa và cấp liên kết đặt lại mật khẩu 1 lần.
               </p>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5">
-            <div className="flex items-center gap-1.5 bg-white/10 p-1.5 rounded-xl border border-white/15">
-              <button
-                type="button"
-                onClick={() => handleSwitchTaskRole('admin')}
-                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  activeRole === 'admin'
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'text-slate-300 hover:text-white hover:bg-white/10'
-                }`}
-              >
-                <ShieldCheck className="w-4 h-4" />
-                <span>1. Quản trị</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleSwitchTaskRole('medic')}
-                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  activeRole === 'medic'
-                    ? 'bg-emerald-600 text-white shadow-sm'
-                    : 'text-slate-300 hover:text-white hover:bg-white/10'
-                }`}
-              >
-                <Stethoscope className="w-4 h-4" />
-                <span>2. Nhân viên Y tế</span>
-              </button>
-            </div>
-
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
             <button
               type="button"
-              onClick={handleResetStandardPermissions}
-              className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/20 text-white border border-white/20 transition-all cursor-pointer"
-              title="Khôi phục phân quyền mặc định chuẩn cho 2 nhiệm vụ Quản trị và Nhân viên Y tế"
+              onClick={fetchUsersFromServer}
+              className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/20 text-white border border-white/15 transition-all cursor-pointer"
             >
               <RefreshCw className="w-3.5 h-3.5" />
-              <span>Khôi phục chuẩn 2 nhiệm vụ</span>
+              <span>Làm mới</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleOpenCreateModal}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition-all cursor-pointer"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>+ Tạo tài khoản thành viên</span>
             </button>
           </div>
         </div>
       </div>
 
-      {/* 2 Clear Task Role Cards (No individual personnel names) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        {/* NHIỆM VỤ 1: QUẢN TRỊ */}
-        <div
-          className={`p-5 rounded-2xl border-2 bg-white transition-all flex flex-col justify-between ${
-            activeRole === 'admin'
-              ? 'border-indigo-600 shadow-md ring-2 ring-indigo-100'
-              : 'border-indigo-200 hover:border-indigo-300'
-          }`}
-        >
-          <div className="space-y-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold border border-indigo-200 shrink-0">
-                  <ShieldCheck className="w-6 h-6" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-base font-black text-slate-900 uppercase">
-                      NHIỆM VỤ 1: QUẢN TRỊ
-                    </h3>
-                    {activeRole === 'admin' && (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-indigo-600 text-white">
-                        Đang chọn
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Quản trị toàn diện hệ thống, phê duyệt kiểm kê/tiêu hủy & bảo mật dữ liệu
-                  </p>
-                </div>
-              </div>
-              <span className="px-3 py-1 rounded-xl text-xs font-extrabold bg-indigo-50 text-indigo-800 border border-indigo-200 shrink-0">
-                {adminGrantedCount}/8 quyền
-              </span>
-            </div>
-
-            <div className="p-3.5 rounded-xl bg-indigo-50/70 border border-indigo-200/80 space-y-2 text-xs">
-              <p className="font-bold text-indigo-950 uppercase text-[11px] tracking-wider">
-                Phạm vi thẩm quyền của Quản trị:
-              </p>
-              <ul className="space-y-1.5 text-slate-700">
-                <li className="flex items-start gap-2">
-                  <Check className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
-                  <span>
-                    <strong>Độc quyền Phê duyệt:</strong> Xác nhận biên bản kiểm kê định kỳ, chốt điều chỉnh số liệu chênh lệch tồn kho và phê duyệt quyết định tiêu hủy thuốc hết hạn.
-                  </span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <Check className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
-                  <span>
-                    <strong>Độc quyền Quản trị & Sao lưu:</strong> Cấu hình thông số trường học, quản lý phân quyền, xem nhật ký kiểm toán (Audit Log), sao lưu và khôi phục dữ liệu toàn trường.
-                  </span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <Check className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
-                  <span>
-                    <strong>Giám sát toàn bộ chuyên môn:</strong> Tra cứu, kiểm tra và thực hiện mọi nghiệp vụ hồ sơ học sinh, ca khám phòng y tế, kho thuốc FEFO và báo cáo A4.
-                  </span>
-                </li>
-              </ul>
-            </div>
-          </div>
-
-          <div className="pt-4 mt-4 border-t border-slate-100 flex items-center justify-between gap-2">
-            <span className="text-[11px] font-semibold text-indigo-700">
-              Trạng thái: Toàn quyền hệ thống (8/8 chức năng)
-            </span>
-            {activeRole !== 'admin' ? (
-              <button
-                type="button"
-                onClick={() => handleSwitchTaskRole('admin')}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors cursor-pointer"
-              >
-                <ArrowRightLeft className="w-3.5 h-3.5" />
-                <span>Chuyển sang nhiệm vụ Quản trị</span>
-              </button>
-            ) : (
-              <span className="inline-flex items-center gap-1 text-xs font-bold text-indigo-700 bg-indigo-50 px-3 py-1.5 rounded-xl border border-indigo-200">
-                <CheckCircle2 className="w-4 h-4" />
-                <span>Đang sử dụng nhiệm vụ này</span>
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* NHIỆM VỤ 2: NHÂN VIÊN Y TẾ */}
-        <div
-          className={`p-5 rounded-2xl border-2 bg-white transition-all flex flex-col justify-between ${
-            activeRole === 'medic'
-              ? 'border-emerald-600 shadow-md ring-2 ring-emerald-100'
-              : 'border-emerald-200 hover:border-emerald-300'
-          }`}
-        >
-          <div className="space-y-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold border border-emerald-200 shrink-0">
-                  <Stethoscope className="w-6 h-6" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-base font-black text-slate-900 uppercase">
-                      NHIỆM VỤ 2: NHÂN VIÊN Y TẾ
-                    </h3>
-                    {activeRole === 'medic' && (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-600 text-white">
-                        Đang chọn
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Trực tiếp phụ trách chuyên môn Phòng Y tế học đường & quản lý tủ thuốc
-                  </p>
-                </div>
-              </div>
-              <span className="px-3 py-1 rounded-xl text-xs font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-200 shrink-0">
-                {medicGrantedCount}/8 quyền
-              </span>
-            </div>
-
-            <div className="p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-200/80 space-y-2 text-xs">
-              <p className="font-bold text-emerald-950 uppercase text-[11px] tracking-wider">
-                Phạm vi thẩm quyền của Nhân viên Y tế:
-              </p>
-              <ul className="space-y-1.5 text-slate-700">
-                <li className="flex items-start gap-2">
-                  <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                  <span>
-                    <strong>Khám & Cấp phát thuốc:</strong> Tiếp nhận học sinh vào Phòng Y tế, đo sinh hiệu & cân nặng, cân đối liều lượng thuốc và cấp phát tự động trừ kho FEFO.
-                  </span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                  <span>
-                    <strong>Quản lý Kho dược & Hồ sơ:</strong> Quản lý danh mục thuốc/vật tư, lập phiếu nhập - xuất kho, cập nhật hồ sơ sức khỏe học sinh, khám định kỳ & in sổ A4.
-                  </span>
-                </li>
-                <li className="flex items-start gap-2 text-rose-800">
-                  <Lock className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                  <span>
-                    <strong>Giới hạn phân quyền rõ ràng:</strong> Không tự phê duyệt chốt điều chỉnh chênh lệch kiểm kê/hủy thuốc và không truy cập Cài đặt hệ thống / Xóa dữ liệu gốc.
-                  </span>
-                </li>
-              </ul>
-            </div>
-          </div>
-
-          <div className="pt-4 mt-4 border-t border-slate-100 flex items-center justify-between gap-2">
-            <span className="text-[11px] font-semibold text-emerald-700">
-              Trạng thái: Chuyên môn Y tế ({medicGrantedCount}/8 chức năng)
-            </span>
-            {activeRole !== 'medic' ? (
-              <button
-                type="button"
-                onClick={() => handleSwitchTaskRole('medic')}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors cursor-pointer"
-              >
-                <ArrowRightLeft className="w-3.5 h-3.5" />
-                <span>Chuyển sang nhiệm vụ Nhân viên Y tế</span>
-              </button>
-            ) : (
-              <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200">
-                <CheckCircle2 className="w-4 h-4" />
-                <span>Đang sử dụng nhiệm vụ này</span>
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Detailed Permission Matrix Table for the 2 Roles */}
+      {/* Member Accounts Table */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="p-4 sm:p-5 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-              <Sliders className="w-4 h-4 text-indigo-600" />
-              <span>Bảng Phân Quyền Rõ Ràng Giữa 2 Nhiệm Vụ: Quản Trị & Nhân Viên Y Tế</span>
+              <UserIcon className="w-4 h-4 text-indigo-600" />
+              <span>Danh Sách Tài Khoản Thành Viên ({users.length} tài khoản)</span>
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Đã xóa toàn bộ nhân sự cá nhân • Chỉ phân quyền theo 2 nhiệm vụ chính thức của hệ thống
+              Mật khẩu của thành viên được băm một chiều (Bcrypt) và tuyệt đối không hiển thị cho Quản trị viên
             </p>
           </div>
-
-          <div className="flex items-center gap-3 text-xs">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-800 font-bold border border-indigo-200">
-              <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
-              Quản trị ({adminGrantedCount}/8)
-            </span>
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 font-bold border border-emerald-200">
-              <Stethoscope className="w-3.5 h-3.5 text-emerald-600" />
-              Nhân viên Y tế ({medicGrantedCount}/8)
+          <div className="text-xs text-slate-600 flex items-center gap-2">
+            <span
+              className={`px-2.5 py-1 rounded-lg font-semibold border ${
+                smtpConfigured
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                  : 'bg-amber-50 text-amber-800 border-amber-200'
+              }`}
+            >
+              {smtpConfigured
+                ? '✓ Đã kết nối SMTP gửi Email tự động'
+                : 'Chế độ Liên kết trực tiếp (Chưa cấu hình biến môi trường SMTP)'}
             </span>
           </div>
         </div>
@@ -557,114 +582,191 @@ export const RoleManagement: React.FC = () => {
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-100/80 text-slate-700 border-b border-slate-200 font-bold uppercase text-[10px]">
               <tr>
-                <th className="py-3.5 px-4 w-5/12">Nhiệm vụ chuyên môn / Chức năng hệ thống</th>
-                <th className="py-3.5 px-4 text-center w-3/12 border-l border-slate-200 bg-indigo-50/50 text-indigo-950">
-                  1. Quản trị (Admin)
-                </th>
-                <th className="py-3.5 px-4 text-center w-4/12 border-l border-slate-200 bg-emerald-50/50 text-emerald-950">
-                  2. Nhân viên Y tế (Medic)
-                </th>
+                <th className="py-3 px-4">Thành viên / Chức vụ</th>
+                <th className="py-3 px-4">Tên đăng nhập & Email</th>
+                <th className="py-3 px-4">Vai trò & Quyền hạn</th>
+                <th className="py-3 px-4">Trạng thái bảo mật</th>
+                <th className="py-3 px-4 text-right">Thao tác quản trị</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
-              {PERMISSION_CONFIG.map((perm) => {
-                const isAdminEnabled = !!adminPerms[perm.key];
-                const isMedicEnabled = !!medicPerms[perm.key];
-                const isExclusiveAdmin =
-                  perm.group === 'Quản trị, Phê duyệt & Bảo mật hệ thống';
+              {users.map((u) => {
+                const perms = {
+                  ...getDefaultPermsForRole(u.role),
+                  ...(u.permissions || {}),
+                };
+                const grantedCount = PERMISSION_CONFIG.filter((p) => !!perms[p.key]).length;
+                const isLocked = u.status === 'inactive' || u.status === 'locked';
+                const isSelected = selectedUser?.id === u.id;
 
                 return (
                   <tr
-                    key={perm.key}
-                    className={`hover:bg-slate-50/80 transition-colors ${
-                      isExclusiveAdmin ? 'bg-amber-50/20' : ''
+                    key={u.id}
+                    className={`transition-colors ${
+                      isSelected ? 'bg-indigo-50/40' : 'hover:bg-slate-50'
                     }`}
                   >
-                    {/* Col 1: Description */}
                     <td className="py-3.5 px-4">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-bold text-slate-900 text-xs">{perm.label}</span>
-                        <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            isExclusiveAdmin
-                              ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                              : 'bg-slate-100 text-slate-700'
+                      <div className="flex items-center gap-2.5">
+                        <div
+                          className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold shrink-0 ${
+                            isLocked
+                              ? 'bg-rose-100 text-rose-700'
+                              : u.role === 'admin' || u.role === 'bgh'
+                              ? 'bg-indigo-100 text-indigo-700'
+                              : 'bg-emerald-100 text-emerald-700'
                           }`}
                         >
-                          {perm.group}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
-                        {perm.description}
-                      </p>
-                    </td>
-
-                    {/* Col 2: Quản trị */}
-                    <td className="py-3.5 px-4 text-center border-l border-slate-200 bg-indigo-50/10">
-                      <div className="flex flex-col items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleTogglePermission('admin', perm.key, isAdminEnabled, perm.shortLabel)
-                          }
-                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                            isAdminEnabled
-                              ? 'bg-indigo-600 text-white shadow-2xs hover:bg-indigo-700'
-                              : 'bg-slate-100 text-slate-500 border border-slate-300 hover:bg-slate-200'
-                          }`}
-                        >
-                          {isAdminEnabled ? (
-                            <>
-                              <Check className="w-3.5 h-3.5 stroke-[3]" />
-                              <span>Được phép</span>
-                            </>
+                          {u.role === 'admin' || u.role === 'bgh' ? (
+                            <ShieldCheck className="w-4 h-4" />
                           ) : (
-                            <>
-                              <X className="w-3.5 h-3.5 stroke-[2.5]" />
-                              <span>Đã tắt</span>
-                            </>
+                            <Stethoscope className="w-4 h-4" />
                           )}
-                        </button>
-                        <span className="text-[11px] text-indigo-900 font-medium">
-                          {perm.adminScope}
-                        </span>
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold text-slate-900 text-xs">{u.fullName}</span>
+                            {currentUser?.id === u.id && (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-600 text-white">
+                                Bạn
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-slate-500">
+                            {u.title || getRoleLabel(u.role)} • {u.department || 'Trường THCS Đông Thạnh'}
+                          </p>
+                        </div>
                       </div>
                     </td>
 
-                    {/* Col 3: Nhân viên Y tế */}
-                    <td className="py-3.5 px-4 text-center border-l border-slate-200 bg-emerald-50/10">
-                      <div className="flex flex-col items-center gap-1.5">
+                    <td className="py-3.5 px-4">
+                      <div className="space-y-0.5">
+                        <p className="font-mono font-bold text-slate-800">{u.username}</p>
+                        <p className="text-[11px] text-slate-500">{u.email || 'Chưa cập nhật email'}</p>
+                      </div>
+                    </td>
+
+                    <td className="py-3.5 px-4">
+                      <div className="flex flex-col items-start gap-1">
+                        <span
+                          className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold border ${
+                            u.role === 'admin' || u.role === 'bgh'
+                              ? 'bg-indigo-50 text-indigo-800 border-indigo-200'
+                              : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                          }`}
+                        >
+                          {getRoleLabel(u.role)} ({grantedCount}/8 quyền)
+                        </span>
                         <button
                           type="button"
-                          onClick={() =>
-                            handleTogglePermission('medic', perm.key, isMedicEnabled, perm.shortLabel)
-                          }
-                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                            isMedicEnabled
-                              ? 'bg-emerald-600 text-white shadow-2xs hover:bg-emerald-700'
-                              : 'bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100'
-                          }`}
-                          title="Nhấn để Cấp hoặc Thu hồi quyền này của Nhân viên Y tế"
+                          onClick={() => setSelectedUserId(u.id)}
+                          className="text-[11px] font-semibold text-indigo-600 hover:underline cursor-pointer"
                         >
-                          {isMedicEnabled ? (
+                          {isSelected ? 'Đang xem bảng quyền bên dưới' : 'Cấu hình quyền chi tiết →'}
+                        </button>
+                      </div>
+                    </td>
+
+                    <td className="py-3.5 px-4">
+                      <div className="flex flex-col items-start gap-1">
+                        {u.status === 'inactive' ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
+                            <Lock className="w-3 h-3" /> Đã khóa bởi Quản trị
+                          </span>
+                        ) : u.status === 'locked' ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                            <ShieldAlert className="w-3 h-3" /> Tạm khóa (Nhập sai MK)
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            <CheckCircle2 className="w-3 h-3" /> Đang hoạt động
+                          </span>
+                        )}
+
+                        {u.mustChangePassword && (
+                          <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                            Bắt buộc đổi MK ở lần đăng nhập đầu
+                          </span>
+                        )}
+                        {u.hasActiveSetupLink && (
+                          <span className="text-[10px] font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+                            Có liên kết đặt MK đang hiệu lực
+                          </span>
+                        )}
+                        {u.pendingResetRequestAt && (
+                          <span className="text-[10px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+                            ⚡ Thành viên yêu cầu đặt lại mật khẩu
+                          </span>
+                        )}
+                        {u.lastLoginAt && (
+                          <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                            <Clock className="w-3 h-3" /> Đăng nhập:{' '}
+                            {new Date(u.lastLoginAt).toLocaleString('vi-VN')}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+
+                    <td className="py-3.5 px-4 text-right">
+                      <div className="inline-flex items-center justify-end gap-1.5 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditModal(u)}
+                          className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center gap-1 cursor-pointer"
+                          title="Chỉnh sửa thông tin & phân quyền"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                          <span>Sửa & Quyền</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setResetTargetUser(u);
+                            setResetMode('link');
+                            setResetTempPassword(generateRandomStrongPassword());
+                          }}
+                          className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 flex items-center gap-1 cursor-pointer"
+                          title="Cấp liên kết đặt lại mật khẩu 1 lần hoặc đặt mật khẩu tạm thời"
+                        >
+                          <KeyRound className="w-3.5 h-3.5" />
+                          <span>Đặt lại MK</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={currentUser?.id === u.id}
+                          onClick={() => handleToggleLockUser(u)}
+                          className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1 border cursor-pointer disabled:opacity-40 ${
+                            isLocked
+                              ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-200'
+                              : 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-200'
+                          }`}
+                          title={isLocked ? 'Mở khóa tài khoản này' : 'Khóa tài khoản & thu hồi phiên đăng nhập'}
+                        >
+                          {isLocked ? (
                             <>
-                              <Check className="w-3.5 h-3.5 stroke-[3]" />
-                              <span>Được phép (Bấm để khóa)</span>
+                              <Unlock className="w-3.5 h-3.5" />
+                              <span>Mở khóa</span>
                             </>
                           ) : (
                             <>
                               <Lock className="w-3.5 h-3.5" />
-                              <span>Giới hạn (Bấm để cấp)</span>
+                              <span>Khóa</span>
                             </>
                           )}
                         </button>
-                        <span
-                          className={`text-[11px] font-medium ${
-                            isMedicEnabled ? 'text-emerald-900' : 'text-rose-700'
-                          }`}
-                        >
-                          {perm.medicScope}
-                        </span>
+
+                        {currentUser?.id !== u.id && (
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeleteUser(u)}
+                            className="p-1.5 rounded-lg text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 cursor-pointer"
+                            title="Xóa tài khoản thành viên"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -673,26 +775,581 @@ export const RoleManagement: React.FC = () => {
             </tbody>
           </table>
         </div>
-
-        {/* Summary Footer */}
-        <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-slate-600">
-          <div className="flex items-center gap-2">
-            <Info className="w-4 h-4 text-indigo-600 shrink-0" />
-            <span>
-              <strong>Nguyên tắc phân quyền:</strong> Hệ thống chỉ duy trì 2 nhiệm vụ{' '}
-              <strong className="text-indigo-700">Quản trị</strong> và{' '}
-              <strong className="text-emerald-700">Nhân viên Y tế</strong> (không lưu danh sách nhân sự cá nhân).
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={handleResetStandardPermissions}
-            className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition-colors shrink-0 cursor-pointer"
-          >
-            Đặt lại phân quyền chuẩn (8/8 & 6/8)
-          </button>
-        </div>
       </div>
+
+      {/* Granular Permission Matrix for Selected Member */}
+      {selectedUser && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+          <div className="p-4 sm:p-5 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <Sliders className="w-4 h-4 text-indigo-600" />
+                <span>
+                  Ma Trận Phân Quyền Chi Tiết Cho Thành Viên:{' '}
+                  <span className="text-indigo-700">{selectedUser.fullName}</span> (
+                  <code className="font-mono">{selectedUser.username}</code>)
+                </span>
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Thay đổi quyền sẽ có hiệu lực ngay lập tức ở cả giao diện và kiểm tra quyền phía Máy chủ (Server-side RBAC)
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-bold text-slate-600">Chọn thành viên:</label>
+              <select
+                value={selectedUser.id}
+                onChange={(e) => setSelectedUserId(e.target.value)}
+                className="px-3 py-1.5 text-xs font-bold border border-slate-300 rounded-xl bg-white text-slate-900"
+              >
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.fullName} ({u.username} - {getRoleLabel(u.role)})
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-100/80 text-slate-700 border-b border-slate-200 font-bold uppercase text-[10px]">
+                <tr>
+                  <th className="py-3 px-4 w-8/12">Chức năng / Quyền hạn nghiệp vụ</th>
+                  <th className="py-3 px-4 text-center w-4/12 border-l border-slate-200">
+                    Trạng thái cấp quyền ({selectedUser.username})
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {PERMISSION_CONFIG.map((perm) => {
+                  const userPerms = {
+                    ...getDefaultPermsForRole(selectedUser.role),
+                    ...(selectedUser.permissions || {}),
+                  };
+                  const isEnabled = !!userPerms[perm.key];
+                  const isExclusiveAdmin =
+                    perm.group === 'Quản trị, Phê duyệt & Bảo mật hệ thống';
+
+                  return (
+                    <tr key={perm.key} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-slate-900 text-xs">{perm.label}</span>
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              isExclusiveAdmin
+                                ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                : 'bg-slate-100 text-slate-700'
+                            }`}
+                          >
+                            {perm.group}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-1">{perm.description}</p>
+                      </td>
+                      <td className="py-3 px-4 text-center border-l border-slate-200">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleToggleUserPermission(selectedUser, perm.key, perm.shortLabel)
+                          }
+                          className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                            isEnabled
+                              ? 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-2xs'
+                              : 'bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100'
+                          }`}
+                        >
+                          {isEnabled ? (
+                            <>
+                              <Check className="w-3.5 h-3.5 stroke-[3]" />
+                              <span>Được phép (Bấm để thu hồi)</span>
+                            </>
+                          ) : (
+                            <>
+                              <Lock className="w-3.5 h-3.5" />
+                              <span>Không có quyền (Bấm để cấp)</span>
+                            </>
+                          )}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 1: CREATE OR EDIT MEMBER ACCOUNT */}
+      {isCreateModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[92vh] overflow-y-auto p-6 shadow-2xl border border-slate-200 space-y-5">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="font-black text-base text-slate-900">
+                  {editingUser
+                    ? `Cập Nhật Tài Khoản: ${editingUser.fullName}`
+                    : 'Tạo Tài Khoản Thành Viên Mới'}
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Thiết lập thông tin đăng nhập, vai trò và quyền hạn chi tiết cho thành viên
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCreateModalOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-xl hover:bg-slate-100 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveMember} className="space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Họ và tên thành viên <span className="text-rose-600">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formFullName}
+                    onChange={(e) => setFormFullName(e.target.value)}
+                    placeholder="VD: Nguyễn Thị Minh Anh"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Tên đăng nhập <span className="text-rose-600">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formUsername}
+                    onChange={(e) => setFormUsername(e.target.value.toLowerCase())}
+                    placeholder="VD: yte_minhanh"
+                    className="w-full px-3 py-2 font-mono border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Email</label>
+                  <input
+                    type="email"
+                    value={formEmail}
+                    onChange={(e) => setFormEmail(e.target.value)}
+                    placeholder="VD: minhanh@thcsdongthanh.edu.vn"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Số điện thoại</label>
+                  <input
+                    type="text"
+                    value={formPhone}
+                    onChange={(e) => setFormPhone(e.target.value)}
+                    placeholder="VD: 0909123456"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Chức vụ</label>
+                  <input
+                    type="text"
+                    value={formTitle}
+                    onChange={(e) => setFormTitle(e.target.value)}
+                    placeholder="VD: Cán bộ Y tế học đường"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Vai trò nhóm quyền</label>
+                  <select
+                    value={formRole}
+                    onChange={(e) => {
+                      const nextRole = e.target.value as UserRole;
+                      setFormRole(nextRole);
+                      setFormPermissions(getDefaultPermsForRole(nextRole));
+                    }}
+                    className="w-full px-3 py-2 font-bold border border-slate-300 rounded-xl bg-white"
+                  >
+                    <option value="medic">Nhân viên Y tế (Mặc định 6/8 quyền chuyên môn)</option>
+                    <option value="bgh">Ban Giám Hiệu (Mặc định 8/8 quyền phê duyệt)</option>
+                    <option value="admin">Quản trị viên hệ thống (Toàn quyền 8/8)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Password Provisioning Method (Only on Create) */}
+              {!editingUser && (
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+                  <p className="font-bold text-slate-900">
+                    Phương thức khởi tạo mật khẩu bảo mật cho thành viên:
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <label
+                      className={`p-3 rounded-xl border cursor-pointer flex items-start gap-2.5 ${
+                        formSetupMode === 'link'
+                          ? 'bg-indigo-50 border-indigo-400 text-indigo-950 font-bold'
+                          : 'bg-white border-slate-200 text-slate-700'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="setupMode"
+                        checked={formSetupMode === 'link'}
+                        onChange={() => setFormSetupMode('link')}
+                        className="mt-0.5"
+                      />
+                      <div>
+                        <span className="block">1. Gửi liên kết tự thiết lập mật khẩu</span>
+                        <span className="text-[11px] font-normal text-slate-500">
+                          Tạo liên kết bảo mật dùng 1 lần (hiệu lực 24h) để thành viên tự đặt mật khẩu riêng.
+                        </span>
+                      </div>
+                    </label>
+
+                    <label
+                      className={`p-3 rounded-xl border cursor-pointer flex items-start gap-2.5 ${
+                        formSetupMode === 'temp_password'
+                          ? 'bg-amber-50 border-amber-400 text-amber-950 font-bold'
+                          : 'bg-white border-slate-200 text-slate-700'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="setupMode"
+                        checked={formSetupMode === 'temp_password'}
+                        onChange={() => setFormSetupMode('temp_password')}
+                        className="mt-0.5"
+                      />
+                      <div>
+                        <span className="block">2. Cấp mật khẩu tạm thời</span>
+                        <span className="text-[11px] font-normal text-slate-500">
+                          Bắt buộc thành viên phải đổi mật khẩu ngay ở lần đăng nhập đầu tiên.
+                        </span>
+                      </div>
+                    </label>
+                  </div>
+
+                  {formSetupMode === 'temp_password' && (
+                    <div className="pt-1">
+                      <label className="block font-bold text-slate-700 mb-1">
+                        Nhập mật khẩu tạm thời ban đầu (Chỉ hiển thị lúc tạo, sẽ băm Bcrypt ngay khi lưu):
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={formTempPassword}
+                          onChange={(e) => setFormTempPassword(e.target.value)}
+                          className="flex-1 px-3 py-2 font-mono font-bold border border-slate-300 rounded-xl bg-white"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setFormTempPassword(generateRandomStrongPassword())}
+                          className="px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold rounded-xl cursor-pointer"
+                        >
+                          Tạo ngẫu nhiên
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Granular Permissions Checkboxes */}
+              <div className="space-y-2">
+                <p className="font-bold text-slate-900">Phân quyền chi tiết cho tài khoản này:</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {PERMISSION_CONFIG.map((perm) => {
+                    const checked = !!formPermissions[perm.key];
+                    return (
+                      <label
+                        key={perm.key}
+                        className={`p-2.5 rounded-xl border flex items-start gap-2 cursor-pointer ${
+                          checked
+                            ? 'bg-emerald-50/70 border-emerald-300 text-emerald-950'
+                            : 'bg-slate-50 border-slate-200 text-slate-500'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) =>
+                            setFormPermissions((prev) => ({
+                              ...prev,
+                              [perm.key]: e.target.checked,
+                            }))
+                          }
+                          className="mt-0.5"
+                        />
+                        <span className="font-semibold leading-snug">{perm.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateModalOpen(false)}
+                  className="px-4 py-2 rounded-xl font-bold text-slate-600 hover:bg-slate-100 cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="px-5 py-2.5 rounded-xl font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs cursor-pointer disabled:opacity-50"
+                >
+                  {loading
+                    ? 'Đang lưu...'
+                    : editingUser
+                    ? 'Lưu cập nhật tài khoản'
+                    : 'Tạo tài khoản & Cấp liên kết'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 2: ADMIN RESET PASSWORD FOR MEMBER */}
+      {resetTargetUser && (
+        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 text-xs">
+            <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="font-black text-base text-slate-900">
+                  Hỗ Trợ Đặt Lại Mật Khẩu
+                </h3>
+                <p className="text-slate-500 mt-0.5">
+                  Thành viên: <strong>{resetTargetUser.fullName}</strong> (
+                  <code className="font-mono">{resetTargetUser.username}</code>)
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setResetTargetUser(null)}
+                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAdminResetPassword} className="space-y-4">
+              <div className="space-y-2">
+                <label
+                  className={`p-3 rounded-xl border flex items-start gap-2.5 cursor-pointer ${
+                    resetMode === 'link'
+                      ? 'bg-indigo-50 border-indigo-400 text-indigo-950 font-bold'
+                      : 'bg-white border-slate-200 text-slate-700'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    checked={resetMode === 'link'}
+                    onChange={() => setResetMode('link')}
+                    className="mt-0.5"
+                  />
+                  <div>
+                    <span className="block">1. Cấp liên kết đặt lại mật khẩu 1 lần (Hiệu lực 30 phút)</span>
+                    <span className="text-[11px] font-normal text-slate-500">
+                      Thành viên tự nhập mật khẩu mới qua liên kết bảo mật, Quản trị viên không biết mật khẩu.
+                    </span>
+                  </div>
+                </label>
+
+                <label
+                  className={`p-3 rounded-xl border flex items-start gap-2.5 cursor-pointer ${
+                    resetMode === 'temp_password'
+                      ? 'bg-amber-50 border-amber-400 text-amber-950 font-bold'
+                      : 'bg-white border-slate-200 text-slate-700'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    checked={resetMode === 'temp_password'}
+                    onChange={() => setResetMode('temp_password')}
+                    className="mt-0.5"
+                  />
+                  <div>
+                    <span className="block">2. Đặt mật khẩu tạm thời (Bắt buộc đổi ngay khi đăng nhập)</span>
+                    <span className="text-[11px] font-normal text-slate-500">
+                      Sau khi đăng nhập bằng mật khẩu tạm, hệ thống bắt buộc thành viên đổi sang mật khẩu riêng.
+                    </span>
+                  </div>
+                </label>
+              </div>
+
+              {resetMode === 'temp_password' && (
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Mật khẩu tạm thời (Chỉ hiển thị 1 lần lúc tạo, lưu dưới dạng băm Bcrypt):
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={resetTempPassword}
+                      onChange={(e) => setResetTempPassword(e.target.value)}
+                      className="flex-1 px-3 py-2 font-mono font-bold border border-slate-300 rounded-xl"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setResetTempPassword(generateRandomStrongPassword())}
+                      className="px-3 py-2 bg-slate-100 hover:bg-slate-200 font-bold rounded-xl cursor-pointer"
+                    >
+                      Đổi mã khác
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setResetTargetUser(null)}
+                  className="px-4 py-2 rounded-xl font-bold text-slate-600 hover:bg-slate-100 cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="px-4 py-2 rounded-xl font-bold bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer disabled:opacity-50"
+                >
+                  {loading ? 'Đang xử lý...' : 'Xác nhận đặt lại mật khẩu'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 3: ONE-TIME SETUP / RESET LINK RESULT */}
+      {generatedLinkModal && (
+        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4 text-xs">
+            <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                  <Link2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-base text-slate-900">{generatedLinkModal.title}</h3>
+                  <p className="text-slate-500">
+                    Thành viên: <strong>{generatedLinkModal.fullName}</strong> (
+                    <code className="font-mono font-bold">{generatedLinkModal.username}</code>)
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setGeneratedLinkModal(null)}
+                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {generatedLinkModal.sentViaSmtp ? (
+              <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 flex items-center gap-2">
+                <Mail className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>
+                  Hệ thống đã gửi Email tự động kèm liên kết thiết lập mật khẩu tới{' '}
+                  <strong>{generatedLinkModal.email}</strong>.
+                </span>
+              </div>
+            ) : (
+              <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-950 space-y-1">
+                <p className="font-bold">Hướng dẫn gửi liên kết cho thành viên:</p>
+                <p className="text-[11px] text-amber-800 leading-relaxed">
+                  Sao chép liên kết bảo mật một lần bên dưới và gửi cho thành viên để tự thiết lập mật khẩu (Liên kết hết hạn vào{' '}
+                  <strong>{new Date(generatedLinkModal.expiresAt).toLocaleString('vi-VN')}</strong> và chỉ dùng được 01 lần).
+                </p>
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <label className="block font-bold text-slate-700">
+                Liên kết thiết lập / đặt lại mật khẩu (Chỉ dùng 1 lần):
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={generatedLinkModal.link}
+                  className="flex-1 px-3 py-2 font-mono text-[11px] bg-slate-50 border border-slate-300 rounded-xl text-indigo-950 select-all"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(generatedLinkModal.link);
+                    setCopiedLink(true);
+                    setTimeout(() => setCopiedLink(false), 2500);
+                  }}
+                  className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl flex items-center gap-1.5 shrink-0 cursor-pointer"
+                >
+                  {copiedLink ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  <span>{copiedLink ? 'Đã sao chép' : 'Sao chép'}</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setGeneratedLinkModal(null)}
+                className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl cursor-pointer"
+              >
+                Đã hoàn tất
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 4: CONFIRM DELETE MEMBER */}
+      {confirmDeleteUser && (
+        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 text-xs">
+            <div className="flex items-center gap-3 text-rose-700">
+              <AlertTriangle className="w-6 h-6 shrink-0" />
+              <h3 className="font-black text-base">Xác nhận xóa tài khoản thành viên?</h3>
+            </div>
+            <p className="text-slate-600 leading-relaxed">
+              Bạn có chắc chắn muốn xóa tài khoản của{' '}
+              <strong>{confirmDeleteUser.fullName}</strong> (
+              <code className="font-mono font-bold">{confirmDeleteUser.username}</code>)? Toàn bộ phiên đăng nhập của tài khoản này sẽ bị thu hồi ngay lập tức.
+            </p>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteUser(null)}
+                className="px-4 py-2 rounded-xl font-bold text-slate-600 hover:bg-slate-100 cursor-pointer"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => handleDeleteUser(confirmDeleteUser)}
+                className="px-4 py-2 rounded-xl font-bold bg-rose-600 hover:bg-rose-700 text-white cursor-pointer"
+              >
+                Xác nhận xóa
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

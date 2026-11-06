@@ -15,6 +15,7 @@ import {
   TemplateConfig,
   DEFAULT_TEMPLATE_CONFIG,
 } from '../services/templateConfigService';
+import { db } from '../services/db';
 
 interface ReportSignerConfigModalProps {
   onClose: () => void;
@@ -30,12 +31,18 @@ export const ReportSignerConfigModal: React.FC<ReportSignerConfigModalProps> = (
 
   const handleSave = () => {
     templateConfigService.saveConfig(config);
+    try {
+      db.updateSettings({
+        schoolName: config.schoolName,
+        nurseInCharge: config.signatory1Name,
+      });
+    } catch {}
     setToast('Đã lưu cấu hình người ký & tiêu đề báo cáo thành công!');
     setTimeout(() => {
       setToast(null);
       if (onSaved) onSaved();
       onClose();
-    }, 1200);
+    }, 1000);
   };
 
   const handleReset = () => {

@@ -43,7 +43,13 @@ import { doc, getDoc } from 'firebase/firestore';
 export default function App() {
   // Authentication
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(() => {
-    return localStorage.getItem('school_health_auth_session') === 'true' ? true : null;
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('setupToken') || params.get('resetToken')) {
+        return false;
+      }
+    }
+    return null;
   });
 
   const handleLogout = async () => {
@@ -52,6 +58,15 @@ export default function App() {
     } catch {
       // ignore
     }
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: db.getAuthHeaders(),
+      });
+    } catch {
+      // ignore
+    }
+    db.setAuthToken(null);
     localStorage.removeItem('school_health_auth_session');
     localStorage.removeItem('school_health_user_cache');
     db.unbindUser();
@@ -62,50 +77,50 @@ export default function App() {
       console.warn('Logout error:', e);
     }
   };
-  
+
   useEffect(() => {
-    const saved = localStorage.getItem('school_health_auth_session');
-    if (saved === 'true') {
-      setIsAuthenticated(true);
+    let mounted = true;
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('setupToken') || params.get('resetToken')) {
+        setIsAuthenticated(false);
+        return;
+      }
     }
 
-    // Safety timeout to prevent infinite spinner if Firebase auth handshake hangs
-    const safetyTimer = setTimeout(() => {
-      setIsAuthenticated((prev) => {
-        if (prev === null) {
-          const isSaved = localStorage.getItem('school_health_auth_session') === 'true';
-          return isSaved ? true : false;
+    const verifyServerSession = async () => {
+      try {
+        const res = await fetch('/api/auth/me', {
+          headers: db.getAuthHeaders(),
+          cache: 'no-store',
+        });
+        if (!mounted) return;
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.authenticated && data?.user && !data?.mustChangePassword) {
+            db.setCurrentUser(data.user);
+            db.bindUser(data.user.id, data.user);
+            localStorage.setItem('school_health_auth_session', 'true');
+            localStorage.setItem('school_health_user_cache', JSON.stringify(data.user));
+            setIsAuthenticated(true);
+            return;
+          }
         }
-        return prev;
-      });
-    }, 1500);
-
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      clearTimeout(safetyTimer);
-      if (user) {
-        try {
-          const userData = await syncOrCreateUserProfile(user);
-          db.setCurrentUser(userData);
-          await db.bindUser(user.uid, userData);
-        } catch (e) {
-          console.error("Error fetching user data", e);
-          db.bindUser(user.uid);
-        }
-        localStorage.setItem('school_health_auth_session', 'true');
-        setIsAuthenticated(true);
-      } else {
-        if (localStorage.getItem('school_health_auth_session') === 'true') {
-          const u = db.getCurrentUser();
-          db.bindUser(u?.id || 'usr-medic');
-          setIsAuthenticated(true);
-        } else {
-          setIsAuthenticated(false);
-        }
+        // Session invalid, expired, locked, or requires password change
+        db.setAuthToken(null);
+        localStorage.removeItem('school_health_auth_session');
+        localStorage.removeItem('school_health_user_cache');
+        setIsAuthenticated(false);
+      } catch {
+        if (!mounted) return;
+        setIsAuthenticated(false);
       }
-    });
+    };
+
+    verifyServerSession();
+
     return () => {
-      clearTimeout(safetyTimer);
-      unsubscribe();
+      mounted = false;
     };
   }, []);
 

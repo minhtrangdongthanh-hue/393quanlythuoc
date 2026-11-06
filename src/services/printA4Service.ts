@@ -1,4 +1,4 @@
-import { InventoryCheck, InventoryTransaction, MedicineBatch, StockInOutBalanceRow, MedicineDisposal, ClinicVisit } from '../types';
+import { InventoryCheck, InventoryTransaction, MedicineBatch, StockInOutBalanceRow, MedicineDisposal, ClinicVisit, DisposalCouncilMember, SanitaryNapkinProduct, SanitaryNapkinDispatch, SanitaryNapkinImport } from '../types';
 import { formatDateVN, formatVND, formatTime24H, formatDateTimeVN } from '../utils/helpers';
 import { templateConfigService } from './templateConfigService';
 
@@ -487,7 +487,7 @@ export function renderSignaturesTable(customSigners?: {
   const cfg = templateConfigService.getConfig();
   const title1 = customSigners?.title1 || cfg.signatory1Title || 'CÁN BỘ Y TẾ';
   const sub1 = customSigners?.sub1 || cfg.signatory1Sub || '(Ký và ghi rõ họ tên)';
-  const name1 = customSigners?.name1 || cfg.signatory1Name || 'Y sĩ Trần Thị Bích Thảo';
+  const name1 = customSigners?.name1 || cfg.signatory1Name || 'Cô Đoàn Thị Minh Trang';
 
   const title2 = customSigners?.title2 || cfg.signatory2Title || 'HIỆU TRƯỞNG';
   const sub2 = customSigners?.sub2 || cfg.signatory2Sub || '(Ký, đóng dấu và ghi rõ họ tên)';
@@ -990,55 +990,160 @@ export function printDisposalReportA4(
   disposal: MedicineDisposal,
   schoolName = 'TRƯỜNG THCS ĐÔNG THẠNH'
 ) {
+  const cfg = templateConfigService.getConfig();
+  const governingBody =
+    cfg.governingBody && cfg.governingBody !== 'PHÒNG GD&ĐT HUYỆN HÓC MÔN'
+      ? cfg.governingBody
+      : 'UBND XÃ ĐÔNG THẠNH';
+  const effectiveSchoolName = schoolName || cfg.schoolName || 'TRƯỜNG THCS ĐÔNG THẠNH';
+
   const totalQty = (disposal.items || []).reduce((s, i) => s + (i.disposalQuantity || 0), 0);
+  const rawMembers = disposal.councilMembers || [];
+
+  const bgh = rawMembers.find(
+    (m) =>
+      m.roleTitle.toLowerCase().includes('hiệu trưởng') ||
+      m.roleTitle.toLowerCase().includes('chủ tịch') ||
+      m.position.toLowerCase().includes('giám hiệu')
+  ) || rawMembers[0] || {
+    roleTitle: 'P. HIỆU TRƯỞNG',
+    name: 'Trần Thị Thanh Hiền',
+    position: 'Phó Hiệu trưởng',
+    signNote: '',
+  };
+
+  const medic = rawMembers.find(
+    (m) =>
+      m.roleTitle.toLowerCase().includes('y tế') ||
+      m.roleTitle.toLowerCase().includes('thư ký') ||
+      m.position.toLowerCase().includes('y tế')
+  ) || (rawMembers.length > 1 ? rawMembers[1] : null) || {
+    roleTitle: 'NHÂN VIÊN Y TẾ',
+    name: 'Đoàn Thị Minh Trang',
+    position: 'Phụ trách Phòng Y tế học đường',
+    signNote: '',
+  };
+
+  const acc = rawMembers.find(
+    (m) =>
+      m.roleTitle.toLowerCase().includes('kế toán') ||
+      m.position.toLowerCase().includes('kế toán')
+  );
+
+  const hasAccountant = Boolean(acc && acc.name && acc.name.trim() !== '');
+  const extras = rawMembers.filter((m) => m !== bgh && m !== medic && m !== acc);
+
+  // Attendees list
+  const displayCouncil: DisposalCouncilMember[] = [
+    { ...bgh, roleTitle: bgh.roleTitle || 'P. HIỆU TRƯỞNG', name: bgh.name, position: bgh.position || 'Phó Hiệu trưởng' },
+    { ...medic, roleTitle: medic.roleTitle || 'NHÂN VIÊN Y TẾ', name: medic.name, position: medic.position || 'Phụ trách Phòng Y tế học đường' },
+  ];
+  if (hasAccountant && acc) {
+    displayCouncil.push({
+      ...acc,
+      roleTitle: acc.roleTitle || 'KẾ TOÁN TRƯỜNG',
+      name: acc.name,
+      position: acc.position || 'Kế toán trường',
+    });
+  }
+  extras.forEach((ext) => displayCouncil.push(ext));
+
+  // Thứ tự ký tên chuẩn theo mẫu PDF: P. HIỆU TRƯỞNG bên trái, Kế toán ở giữa (nếu có), NHÂN VIÊN Y TẾ bên phải
+  const signersList: DisposalCouncilMember[] = [
+    bgh,
+    ...(hasAccountant && acc ? [acc] : []),
+    ...extras,
+    medic,
+  ];
+  const colWidth = (100 / signersList.length).toFixed(1);
+
+  // Format date: "Đông Thạnh, ngày 15 tháng 10 năm 2026"
+  const dateParts = (disposal.disposalDate || new Date().toISOString().split('T')[0]).split('-');
+  const dateHeaderStr = `${cfg.location || 'Đông Thạnh'}, ngày ${Number(dateParts[2])} tháng ${Number(dateParts[1])} năm ${dateParts[0]}`;
 
   const content = `
-    ${renderHeader({
-      schoolName,
-      title: 'BIÊN BẢN TIÊU HỦY THUỐC VÀ VẬT TƯ Y TẾ HẾT HẠN',
-      subtitle: `Số biên bản: ${disposal.disposalCode} • Ngày lập: ${formatDateVN(disposal.disposalDate)}`,
-      code: disposal.disposalCode,
-    })}
+    <!-- Top Header -->
+    <table style="width: 100%; border: none; border-collapse: collapse; margin-bottom: 12px; font-family: 'Times New Roman', serif;">
+      <tr>
+        <td style="width: 48%; text-align: center; vertical-align: top; border: none; padding: 0;">
+          <div style="font-size: 11pt; font-weight: normal; text-transform: uppercase; color: #000;">${governingBody}</div>
+          <div style="font-size: 11pt; font-weight: bold; text-transform: uppercase; color: #000; margin-top: 1px;">${effectiveSchoolName}</div>
+          <div style="font-size: 10.5pt; margin-top: 3px; color: #000;">Số:……../BB-HUY</div>
+        </td>
+        <td style="width: 4%; border: none;"></td>
+        <td style="width: 48%; text-align: center; vertical-align: top; border: none; padding: 0;">
+          <div style="font-size: 10.5pt; font-weight: bold; text-transform: uppercase; color: #000;">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</div>
+          <div style="font-size: 11pt; font-weight: bold; color: #000; margin-top: 1px;">Độc lập - Tự do - Hạnh phúc</div>
+          <div style="font-style: italic; font-size: 10.5pt; margin-top: 6px; color: #000;">
+            ${dateHeaderStr}
+          </div>
+        </td>
+      </tr>
+    </table>
 
-    <div class="meta-box">
-      <p>Căn cứ Thông tư liên tịch số 13/2016/TTLT-BYT-BGDĐT ngày 12/5/2016 của Bộ Y tế và Bộ Giáo dục & Đào tạo quy định về công tác y tế trường học;</p>
-      <p>Căn cứ Quyết định số <strong>${disposal.decisionNumber || '18/QĐ-THCSĐT'}</strong> ${
-        disposal.decisionDate ? `ngày ${formatDateVN(disposal.decisionDate)}` : ''
-      } của Hiệu trưởng Trường THCS Đông Thạnh về việc thành lập Hội đồng tiêu hủy thuốc và vật tư y tế hết hạn sử dụng;</p>
-      <p style="margin-top: 6px;">Hôm nay, ngày ${formatDateVN(disposal.disposalDate)}, tại ${
-        disposal.disposalLocation || 'Phòng Y tế Trường THCS Đông Thạnh'
-      }, Hội đồng tiến hành lập biên bản tiêu hủy gồm có:</p>
+    <!-- Title -->
+    <div style="text-align: center; margin: 15px 0 12px 0; font-family: 'Times New Roman', serif;">
+      <div style="font-size: 14pt; font-weight: bold; text-transform: uppercase; line-height: 1.35; color: #000;">
+        BIÊN BẢN TIÊU HỦY THUỐC VÀ VẬT TƯ Y TẾ HẾT HẠN
+      </div>
+      <div style="font-size: 10.5pt; font-style: italic; margin-top: 3px; color: #000;">
+        Số biên bản: ${disposal.disposalCode} • Ngày lập: ${formatDateVN(disposal.disposalDate)}
+      </div>
+      <div style="font-size: 11pt; font-weight: bold; margin-top: 5px; color: #000;">
+        Mã số: ${disposal.disposalCode}
+      </div>
+    </div>
+
+    <!-- Legal & Attendees -->
+    <div style="font-size: 11pt; line-height: 1.5; margin-bottom: 12px; font-family: 'Times New Roman', serif; color: #000;">
+      <p style="margin: 0 0 6px 0; text-align: justify;">
+        Căn cứ Thông tư liên tịch số 13/2016/TTLT-BYT-BGDĐT ngày 12/5/2016 của Bộ Y tế và Bộ Giáo dục & Đào tạo quy định về công tác y tế trường học;
+      </p>
+      ${disposal.decisionNumber && disposal.decisionNumber.trim() ? `
+      <p style="margin: 0 0 6px 0; text-align: justify;">
+        Căn cứ Quyết định số <strong>${disposal.decisionNumber}</strong> ${disposal.decisionDate ? `ngày ${formatDateVN(disposal.decisionDate)}` : ''} của Hiệu trưởng Trường THCS Đông Thạnh về việc thành lập Hội đồng tiêu hủy thuốc và vật tư y tế;
+      </p>` : ''}
+      <p style="margin: 0 0 4px 0; text-align: justify;">
+        Hôm nay, ngày ${formatDateVN(disposal.disposalDate)}, tại ${disposal.disposalLocation || 'Phòng Y tế Trường THCS Đông Thạnh'}, Hội đồng tiến hành tiêu hủy gồm có:
+      </p>
       
-      <table style="width: 100%; margin: 8px 0 10px 0; border: none; font-size: 10pt;">
-        ${(disposal.councilMembers || [])
+      <table style="width: 100%; margin: 4px 0 8px 0; border: none; border-collapse: collapse; font-size: 11pt;">
+        ${displayCouncil
           .map(
             (m, i) => `
           <tr>
-            <td style="padding: 2px 0; width: 30px;">${i + 1}.</td>
-            <td style="padding: 2px 0; width: 230px;">Ông/Bà: <strong>${m.name}</strong></td>
-            <td style="padding: 2px 0; width: 220px;">Chức vụ: ${m.position}</td>
-            <td style="padding: 2px 0;">Vai trò: <strong>${m.roleTitle}</strong></td>
+            <td style="padding: 2px 0; width: 45%; border: none; vertical-align: top;">
+              ${i + 1}.Ông/Bà: <strong>${m.name}</strong>
+            </td>
+            <td style="padding: 2px 0; width: 55%; border: none; vertical-align: top;">
+              Chức vụ: ${m.position || '—'}
+            </td>
           </tr>
         `
           )
           .join('')}
       </table>
 
-      <p><strong>Phương pháp tiêu hủy:</strong> ${disposal.disposalMethod || 'Ngâm hóa chất vô hiệu hóa và chôn lấp hợp vệ sinh theo quy định môi trường y tế.'}</p>
-      ${disposal.witnessNotes ? `<p><strong>Ghi nhận giám sát:</strong> ${disposal.witnessNotes}</p>` : ''}
+      <p style="margin: 6px 0 6px 0; text-align: justify;">
+        <strong>Phương pháp tiêu hủy:</strong> ${disposal.disposalMethod || 'Hòa tan, trung hòa bất hoạt và chuyển bao gói rác thải y tế chuyên trách tiêu hủy theo quy định'}
+      </p>
+      <p style="margin: 0 0 10px 0; text-align: justify;">
+        <strong>Ghi nhận tiêu hủy:</strong> ${disposal.witnessNotes || 'Hội đồng đã kiểm tra đúng chủng loại, số lượng, niêm phong và tiêu hủy an toàn theo quy định. | Biên bản thực tế: Tiêu hủy và xuất trừ kho tự động.'}
+      </p>
     </div>
 
-    <table class="data-table">
+    <!-- Items Table -->
+    <table class="data-table" style="width: 100%; border-collapse: collapse; font-size: 10pt; margin: 8px 0; font-family: 'Times New Roman', serif;">
       <thead>
-        <tr>
-          <th style="width: 35px;">STT</th>
-          <th style="width: 75px;">Mã thuốc</th>
-          <th>Tên thuốc, nồng độ, hoạt chất</th>
-          <th style="width: 75px;">Số lô</th>
-          <th style="width: 75px;">Hạn dùng</th>
-          <th style="width: 50px;">ĐVT</th>
-          <th style="width: 65px;">Số lượng</th>
-          <th style="width: 140px;">Lý do tiêu hủy</th>
+        <tr style="background: #fff; text-align: center;">
+          <th style="border: 1px solid #000; padding: 6px 2px; width: 36px; font-weight: bold;">STT</th>
+          <th style="border: 1px solid #000; padding: 6px 4px; width: 85px; font-weight: bold;">Mã thuốc</th>
+          <th style="border: 1px solid #000; padding: 6px 6px; font-weight: bold;">Tên thuốc, nồng độ, hoạt chất</th>
+          <th style="border: 1px solid #000; padding: 6px 4px; width: 70px; font-weight: bold;">Số lô</th>
+          <th style="border: 1px solid #000; padding: 6px 4px; width: 85px; font-weight: bold;">Hạn dùng</th>
+          <th style="border: 1px solid #000; padding: 6px 2px; width: 45px; font-weight: bold;">ĐVT</th>
+          <th style="border: 1px solid #000; padding: 6px 4px; width: 60px; font-weight: bold;">Số lượng</th>
+          <th style="border: 1px solid #000; padding: 6px 6px; width: 105px; font-weight: bold;">Lý do tiêu hủy</th>
         </tr>
       </thead>
       <tbody>
@@ -1046,65 +1151,65 @@ export function printDisposalReportA4(
           .map(
             (item, i) => `
           <tr>
-            <td class="text-center">${i + 1}</td>
-            <td class="text-center font-bold">${item.medicineCode}</td>
-            <td>
+            <td style="border: 1px solid #000; padding: 6px 2px; text-align: center;">${i + 1}</td>
+            <td style="border: 1px solid #000; padding: 6px 4px; text-align: center; font-weight: bold; font-family: monospace;">${item.medicineCode}</td>
+            <td style="border: 1px solid #000; padding: 6px 6px;">
               <strong>${item.medicineName}</strong>
-              ${item.activeIngredient ? `<div style="font-size: 9pt; color: #475569;">${item.activeIngredient}</div>` : ''}
+              ${item.activeIngredient ? `<div style="font-size: 8.5pt; color: #475569;">${item.activeIngredient}</div>` : ''}
             </td>
-            <td class="text-center font-mono font-bold">${item.batchNumber}</td>
-            <td class="text-center" style="color: #dc2626; font-weight: bold;">${formatDateVN(item.expDate)}</td>
-            <td class="text-center">${item.unit}</td>
-            <td class="text-right font-bold">${item.disposalQuantity}</td>
-            <td style="font-size: 9pt;">${item.reason || 'Hết hạn sử dụng'}</td>
+            <td style="border: 1px solid #000; padding: 6px 4px; text-align: center; font-family: monospace;">${item.batchNumber}</td>
+            <td style="border: 1px solid #000; padding: 6px 4px; text-align: center; color: #dc2626; font-weight: bold;">${formatDateVN(item.expDate)}</td>
+            <td style="border: 1px solid #000; padding: 6px 2px; text-align: center;">${item.unit}</td>
+            <td style="border: 1px solid #000; padding: 6px 4px; text-align: center; font-weight: bold;">${item.disposalQuantity}</td>
+            <td style="border: 1px solid #000; padding: 6px 6px; font-size: 9.5pt;">${item.reason || 'Hết hạn sử dụng'}</td>
           </tr>
         `
           )
           .join('')}
       </tbody>
       <tfoot>
-        <tr style="font-weight: bold; background: #f1f5f9;">
-          <td colspan="6" class="text-center">TỔNG CỘNG (${disposal.items?.length || 0} khoản mục)</td>
-          <td class="text-right font-bold">${totalQty}</td>
-          <td></td>
+        <tr style="font-weight: bold; background: #fff;">
+          <td colspan="6" style="border: 1px solid #000; padding: 6px 6px; text-align: left;">TỔNG CỘNG (${disposal.items?.length || 0} khoản mục)</td>
+          <td style="border: 1px solid #000; padding: 6px 4px; text-align: center;">${totalQty}</td>
+          <td style="border: 1px solid #000; padding: 6px 6px;"></td>
         </tr>
       </tfoot>
     </table>
 
-    <div style="margin: 10px 0; font-size: 10.5pt; font-style: italic;">
-      * Tổng số lượng tiêu hủy: <strong>${totalQty}</strong> đơn vị thuốc.
+    <!-- Total Note & Conclusion -->
+    <div style="margin: 8px 0; font-size: 11pt; font-style: italic; font-family: 'Times New Roman', serif;">
+      * Tổng số lượng tiêu hủy: <strong>${totalQty} đơn vị thuốc.</strong>
     </div>
 
-    <div style="margin: 10px 0; font-size: 10pt;">
-      Hội đồng đã tiến hành tiêu hủy đúng quy trình kỹ thuật, đảm bảo an toàn tuyệt đối và vệ sinh môi trường. Biên bản được lập thành 03 bản có giá trị pháp lý như nhau (01 bản lưu hồ sơ y tế, 01 bản nộp Ban Giám Hiệu, 01 bản nộp bộ phận Kế toán kiểm kê).
+    <div style="margin: 10px 0 25px 0; font-size: 11pt; line-height: 1.5; text-align: justify; font-family: 'Times New Roman', serif;">
+      Hội đồng đã tiến hành tiêu hủy đúng quy trình kỹ thuật, đảm bảo an toàn tuyệt đối và vệ sinh môi trường. Biên bản được lập thành ${hasAccountant ? '03' : '02'} bản có giá trị pháp lý như nhau (01 bản lưu hồ sơ y tế, 01 bản nộp Ban Giám Hiệu${hasAccountant ? ', 01 bản nộp bộ phận Kế toán' : ''}).
     </div>
 
-    <table class="signatures-table" style="margin-top: 25px;">
+    <!-- Signatures: P. HIỆU TRƯỞNG on left, NHÂN VIÊN Y TẾ on right exactly as attached PDF -->
+    <table class="signatures-table" style="margin-top: 25px; width: 100%; border-collapse: collapse; border: none; font-family: 'Times New Roman', serif;">
       <tr>
-        <td style="width: 25%;">
-          <div class="signature-title">THƯ KÝ HỘI ĐỒNG</div>
-          <div class="signature-sub">(Ký và ghi rõ họ tên)</div>
-          <div class="signature-space"></div>
-          <div class="signature-name">${disposal.councilMembers?.find(m => m.roleTitle.toLowerCase().includes('thư ký'))?.name || 'Cán bộ Y tế'}</div>
-        </td>
-        <td style="width: 25%;">
-          <div class="signature-title">KẾ TOÁN TRƯỜNG</div>
-          <div class="signature-sub">(Ký và ghi rõ họ tên)</div>
-          <div class="signature-space"></div>
-          <div class="signature-name">${disposal.councilMembers?.find(m => m.roleTitle.toLowerCase().includes('kế toán') || m.position.toLowerCase().includes('kế toán'))?.name || 'Kế toán trường'}</div>
-        </td>
-        <td style="width: 25%;">
-          <div class="signature-title">ĐẠI DIỆN GIÁM SÁT</div>
-          <div class="signature-sub">(Ký và ghi rõ họ tên)</div>
-          <div class="signature-space"></div>
-          <div class="signature-name">${disposal.councilMembers?.find(m => m.roleTitle.toLowerCase().includes('giám sát') || m.roleTitle.toLowerCase().includes('ủy viên'))?.name || 'Đại diện giám sát'}</div>
-        </td>
-        <td style="width: 25%;">
-          <div class="signature-title">CHỦ TỊCH HỘI ĐỒNG</div>
-          <div class="signature-sub">(Ký, đóng dấu duyệt)</div>
-          <div class="signature-space"></div>
-          <div class="signature-name">${disposal.councilMembers?.find(m => m.roleTitle.toLowerCase().includes('chủ tịch'))?.name || 'Hiệu Trưởng / Phó Hiệu Trưởng'}</div>
-        </td>
+        ${signersList
+          .map(
+            (s) => `
+          <td style="width: ${colWidth}%; vertical-align: top; text-align: center; padding: 0 10px; border: none;">
+            <div style="font-weight: bold; text-transform: uppercase; font-size: 11pt; line-height: 1.3; color: #000;">
+              ${s.roleTitle || 'NGƯỜI KÝ'}
+            </div>
+            ${s.signNote ? `<div style="font-size: 9.5pt; font-style: italic; color: #475569; margin-top: 2px;">${s.signNote}</div>` : ''}
+            ${s.signatureContent && s.signatureContent.trim() ? `
+              <div style="min-height: 70px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-style: italic; color: #1e3a8a; font-weight: 600; padding: 6px 0; font-family: 'Times New Roman', serif; font-size: 11pt;">
+                ${s.signatureContent}
+              </div>
+            ` : `
+              <div style="height: 70px;"></div>
+            `}
+            <div style="font-weight: bold; font-size: 11pt; color: #000;">
+              ${s.name}
+            </div>
+          </td>
+        `
+          )
+          .join('')}
       </tr>
     </table>
   `;
@@ -1117,55 +1222,160 @@ export function exportDisposalWordA4(
   disposal: MedicineDisposal,
   schoolName = 'TRƯỜNG THCS ĐÔNG THẠNH'
 ) {
+  const cfg = templateConfigService.getConfig();
+  const governingBody =
+    cfg.governingBody && cfg.governingBody !== 'PHÒNG GD&ĐT HUYỆN HÓC MÔN'
+      ? cfg.governingBody
+      : 'UBND XÃ ĐÔNG THẠNH';
+  const effectiveSchoolName = schoolName || cfg.schoolName || 'TRƯỜNG THCS ĐÔNG THẠNH';
+
   const totalQty = (disposal.items || []).reduce((s, i) => s + (i.disposalQuantity || 0), 0);
+  const rawMembers = disposal.councilMembers || [];
+
+  const bgh = rawMembers.find(
+    (m) =>
+      m.roleTitle.toLowerCase().includes('hiệu trưởng') ||
+      m.roleTitle.toLowerCase().includes('chủ tịch') ||
+      m.position.toLowerCase().includes('giám hiệu')
+  ) || rawMembers[0] || {
+    roleTitle: 'P. HIỆU TRƯỞNG',
+    name: 'Trần Thị Thanh Hiền',
+    position: 'Phó Hiệu trưởng',
+    signNote: '',
+  };
+
+  const medic = rawMembers.find(
+    (m) =>
+      m.roleTitle.toLowerCase().includes('y tế') ||
+      m.roleTitle.toLowerCase().includes('thư ký') ||
+      m.position.toLowerCase().includes('y tế')
+  ) || (rawMembers.length > 1 ? rawMembers[1] : null) || {
+    roleTitle: 'NHÂN VIÊN Y TẾ',
+    name: 'Đoàn Thị Minh Trang',
+    position: 'Phụ trách Phòng Y tế học đường',
+    signNote: '',
+  };
+
+  const acc = rawMembers.find(
+    (m) =>
+      m.roleTitle.toLowerCase().includes('kế toán') ||
+      m.position.toLowerCase().includes('kế toán')
+  );
+
+  const hasAccountant = Boolean(acc && acc.name && acc.name.trim() !== '');
+  const extras = rawMembers.filter((m) => m !== bgh && m !== medic && m !== acc);
+
+  // Attendees list
+  const displayCouncil: DisposalCouncilMember[] = [
+    { ...bgh, roleTitle: bgh.roleTitle || 'P. HIỆU TRƯỞNG', name: bgh.name, position: bgh.position || 'Phó Hiệu trưởng' },
+    { ...medic, roleTitle: medic.roleTitle || 'NHÂN VIÊN Y TẾ', name: medic.name, position: medic.position || 'Phụ trách Phòng Y tế học đường' },
+  ];
+  if (hasAccountant && acc) {
+    displayCouncil.push({
+      ...acc,
+      roleTitle: acc.roleTitle || 'KẾ TOÁN TRƯỜNG',
+      name: acc.name,
+      position: acc.position || 'Kế toán trường',
+    });
+  }
+  extras.forEach((ext) => displayCouncil.push(ext));
+
+  // Thứ tự ký tên chuẩn theo mẫu PDF: P. HIỆU TRƯỞNG bên trái, Kế toán ở giữa (nếu có), NHÂN VIÊN Y TẾ bên phải
+  const signersList: DisposalCouncilMember[] = [
+    bgh,
+    ...(hasAccountant && acc ? [acc] : []),
+    ...extras,
+    medic,
+  ];
+  const colWidth = (100 / signersList.length).toFixed(1);
+
+  // Format date: "Đông Thạnh, ngày 15 tháng 10 năm 2026"
+  const dateParts = (disposal.disposalDate || new Date().toISOString().split('T')[0]).split('-');
+  const dateHeaderStr = `${cfg.location || 'Đông Thạnh'}, ngày ${Number(dateParts[2])} tháng ${Number(dateParts[1])} năm ${dateParts[0]}`;
 
   const content = `
-    ${renderHeader({
-      schoolName,
-      title: 'BIÊN BẢN TIÊU HỦY THUỐC VÀ VẬT TƯ Y TẾ HẾT HẠN',
-      subtitle: `Số biên bản: ${disposal.disposalCode} • Ngày lập: ${formatDateVN(disposal.disposalDate)}`,
-      code: disposal.disposalCode,
-    })}
+    <!-- Top Header -->
+    <table style="width: 100%; border: none; border-collapse: collapse; margin-bottom: 12px; font-family: 'Times New Roman', serif;">
+      <tr>
+        <td style="width: 48%; text-align: center; vertical-align: top; border: none; padding: 0;">
+          <div style="font-size: 11pt; font-weight: normal; text-transform: uppercase; color: #000;">${governingBody}</div>
+          <div style="font-size: 11pt; font-weight: bold; text-transform: uppercase; color: #000; margin-top: 1px;">${effectiveSchoolName}</div>
+          <div style="font-size: 10.5pt; margin-top: 3px; color: #000;">Số:……../BB-HUY</div>
+        </td>
+        <td style="width: 4%; border: none;"></td>
+        <td style="width: 48%; text-align: center; vertical-align: top; border: none; padding: 0;">
+          <div style="font-size: 10.5pt; font-weight: bold; text-transform: uppercase; color: #000;">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</div>
+          <div style="font-size: 11pt; font-weight: bold; color: #000; margin-top: 1px;">Độc lập - Tự do - Hạnh phúc</div>
+          <div style="font-style: italic; font-size: 10.5pt; margin-top: 6px; color: #000;">
+            ${dateHeaderStr}
+          </div>
+        </td>
+      </tr>
+    </table>
 
-    <div class="meta-box">
-      <p>Căn cứ Thông tư liên tịch số 13/2016/TTLT-BYT-BGDĐT ngày 12/5/2016 của Bộ Y tế và Bộ Giáo dục & Đào tạo quy định về công tác y tế trường học;</p>
-      <p>Căn cứ Quyết định số <strong>${disposal.decisionNumber || '18/QĐ-THCSĐT'}</strong> ${
-        disposal.decisionDate ? `ngày ${formatDateVN(disposal.decisionDate)}` : ''
-      } của Hiệu trưởng Trường THCS Đông Thạnh về việc thành lập Hội đồng tiêu hủy thuốc và vật tư y tế;</p>
-      <p style="margin-top: 6px;">Hôm nay, ngày ${formatDateVN(disposal.disposalDate)}, tại ${
-        disposal.disposalLocation || 'Phòng Y tế Trường THCS Đông Thạnh'
-      }, Hội đồng tiến hành tiêu hủy gồm có:</p>
+    <!-- Title -->
+    <div style="text-align: center; margin: 15px 0 12px 0; font-family: 'Times New Roman', serif;">
+      <div style="font-size: 14pt; font-weight: bold; text-transform: uppercase; line-height: 1.35; color: #000;">
+        BIÊN BẢN TIÊU HỦY THUỐC VÀ VẬT TƯ Y TẾ HẾT HẠN
+      </div>
+      <div style="font-size: 10.5pt; font-style: italic; margin-top: 3px; color: #000;">
+        Số biên bản: ${disposal.disposalCode} • Ngày lập: ${formatDateVN(disposal.disposalDate)}
+      </div>
+      <div style="font-size: 11pt; font-weight: bold; margin-top: 5px; color: #000;">
+        Mã số: ${disposal.disposalCode}
+      </div>
+    </div>
+
+    <!-- Legal & Attendees -->
+    <div style="font-size: 11pt; line-height: 1.5; margin-bottom: 12px; font-family: 'Times New Roman', serif; color: #000;">
+      <p style="margin: 0 0 6px 0; text-align: justify;">
+        Căn cứ Thông tư liên tịch số 13/2016/TTLT-BYT-BGDĐT ngày 12/5/2016 của Bộ Y tế và Bộ Giáo dục & Đào tạo quy định về công tác y tế trường học;
+      </p>
+      ${disposal.decisionNumber && disposal.decisionNumber.trim() ? `
+      <p style="margin: 0 0 6px 0; text-align: justify;">
+        Căn cứ Quyết định số <strong>${disposal.decisionNumber}</strong> ${disposal.decisionDate ? `ngày ${formatDateVN(disposal.decisionDate)}` : ''} của Hiệu trưởng Trường THCS Đông Thạnh về việc thành lập Hội đồng tiêu hủy thuốc và vật tư y tế;
+      </p>` : ''}
+      <p style="margin: 0 0 4px 0; text-align: justify;">
+        Hôm nay, ngày ${formatDateVN(disposal.disposalDate)}, tại ${disposal.disposalLocation || 'Phòng Y tế Trường THCS Đông Thạnh'}, Hội đồng tiến hành tiêu hủy gồm có:
+      </p>
       
-      <table style="width: 100%; margin: 8px 0 10px 0; border: none; font-size: 10pt;">
-        ${(disposal.councilMembers || [])
+      <table style="width: 100%; margin: 4px 0 8px 0; border: none; border-collapse: collapse; font-size: 11pt;">
+        ${displayCouncil
           .map(
             (m, i) => `
           <tr>
-            <td style="padding: 2px 0; width: 30px;">${i + 1}.</td>
-            <td style="padding: 2px 0; width: 230px;">Ông/Bà: <strong>${m.name}</strong></td>
-            <td style="padding: 2px 0; width: 220px;">Chức vụ: ${m.position}</td>
-            <td style="padding: 2px 0;">Vai trò: <strong>${m.roleTitle}</strong></td>
+            <td style="padding: 2px 0; width: 45%; border: none; vertical-align: top;">
+              ${i + 1}.Ông/Bà: <strong>${m.name}</strong>
+            </td>
+            <td style="padding: 2px 0; width: 55%; border: none; vertical-align: top;">
+              Chức vụ: ${m.position || '—'}
+            </td>
           </tr>
         `
           )
           .join('')}
       </table>
 
-      <p><strong>Phương pháp tiêu hủy:</strong> ${disposal.disposalMethod || 'Ngâm hóa chất vô hiệu hóa và chôn lấp hợp vệ sinh theo quy định y tế.'}</p>
-      ${disposal.witnessNotes ? `<p><strong>Ghi nhận giám sát:</strong> ${disposal.witnessNotes}</p>` : ''}
+      <p style="margin: 6px 0 6px 0; text-align: justify;">
+        <strong>Phương pháp tiêu hủy:</strong> ${disposal.disposalMethod || 'Hòa tan, trung hòa bất hoạt và chuyển bao gói rác thải y tế chuyên trách tiêu hủy theo quy định'}
+      </p>
+      <p style="margin: 0 0 10px 0; text-align: justify;">
+        <strong>Ghi nhận tiêu hủy:</strong> ${disposal.witnessNotes || 'Hội đồng đã kiểm tra đúng chủng loại, số lượng, niêm phong và tiêu hủy an toàn theo quy định. | Biên bản thực tế: Tiêu hủy và xuất trừ kho tự động.'}
+      </p>
     </div>
 
-    <table class="data-table">
+    <!-- Items Table -->
+    <table class="data-table" style="width: 100%; border-collapse: collapse; font-size: 10pt; margin: 8px 0; font-family: 'Times New Roman', serif;">
       <thead>
-        <tr>
-          <th style="width: 35px;">STT</th>
-          <th style="width: 75px;">Mã thuốc</th>
-          <th>Tên thuốc, nồng độ, hoạt chất</th>
-          <th style="width: 75px;">Số lô</th>
-          <th style="width: 75px;">Hạn dùng</th>
-          <th style="width: 50px;">ĐVT</th>
-          <th style="width: 65px;">Số lượng</th>
-          <th style="width: 140px;">Lý do tiêu hủy</th>
+        <tr style="background: #fff; text-align: center;">
+          <th style="border: 1px solid #000; padding: 6px 2px; width: 36px; font-weight: bold;">STT</th>
+          <th style="border: 1px solid #000; padding: 6px 4px; width: 85px; font-weight: bold;">Mã thuốc</th>
+          <th style="border: 1px solid #000; padding: 6px 6px; font-weight: bold;">Tên thuốc, nồng độ, hoạt chất</th>
+          <th style="border: 1px solid #000; padding: 6px 4px; width: 70px; font-weight: bold;">Số lô</th>
+          <th style="border: 1px solid #000; padding: 6px 4px; width: 85px; font-weight: bold;">Hạn dùng</th>
+          <th style="border: 1px solid #000; padding: 6px 2px; width: 45px; font-weight: bold;">ĐVT</th>
+          <th style="border: 1px solid #000; padding: 6px 4px; width: 60px; font-weight: bold;">Số lượng</th>
+          <th style="border: 1px solid #000; padding: 6px 6px; width: 105px; font-weight: bold;">Lý do tiêu hủy</th>
         </tr>
       </thead>
       <tbody>
@@ -1173,61 +1383,65 @@ export function exportDisposalWordA4(
           .map(
             (item, i) => `
           <tr>
-            <td class="text-center">${i + 1}</td>
-            <td class="text-center font-bold">${item.medicineCode}</td>
-            <td>
+            <td style="border: 1px solid #000; padding: 6px 2px; text-align: center;">${i + 1}</td>
+            <td style="border: 1px solid #000; padding: 6px 4px; text-align: center; font-weight: bold; font-family: monospace;">${item.medicineCode}</td>
+            <td style="border: 1px solid #000; padding: 6px 6px;">
               <strong>${item.medicineName}</strong>
-              ${item.activeIngredient ? `<div style="font-size: 9pt; color: #475569;">${item.activeIngredient}</div>` : ''}
+              ${item.activeIngredient ? `<div style="font-size: 8.5pt; color: #475569;">${item.activeIngredient}</div>` : ''}
             </td>
-            <td class="text-center font-mono font-bold">${item.batchNumber}</td>
-            <td class="text-center" style="color: #dc2626; font-weight: bold;">${formatDateVN(item.expDate)}</td>
-            <td class="text-center">${item.unit}</td>
-            <td class="text-right font-bold">${item.disposalQuantity}</td>
-            <td style="font-size: 9pt;">${item.reason || 'Hết hạn sử dụng'}</td>
+            <td style="border: 1px solid #000; padding: 6px 4px; text-align: center; font-family: monospace;">${item.batchNumber}</td>
+            <td style="border: 1px solid #000; padding: 6px 4px; text-align: center; color: #dc2626; font-weight: bold;">${formatDateVN(item.expDate)}</td>
+            <td style="border: 1px solid #000; padding: 6px 2px; text-align: center;">${item.unit}</td>
+            <td style="border: 1px solid #000; padding: 6px 4px; text-align: center; font-weight: bold;">${item.disposalQuantity}</td>
+            <td style="border: 1px solid #000; padding: 6px 6px; font-size: 9.5pt;">${item.reason || 'Hết hạn sử dụng'}</td>
           </tr>
         `
           )
           .join('')}
       </tbody>
       <tfoot>
-        <tr style="font-weight: bold; background: #f1f5f9;">
-          <td colspan="6" class="text-center">TỔNG CỘNG (${disposal.items?.length || 0} khoản mục)</td>
-          <td class="text-right font-bold">${totalQty}</td>
-          <td></td>
+        <tr style="font-weight: bold; background: #fff;">
+          <td colspan="6" style="border: 1px solid #000; padding: 6px 6px; text-align: left;">TỔNG CỘNG (${disposal.items?.length || 0} khoản mục)</td>
+          <td style="border: 1px solid #000; padding: 6px 4px; text-align: center;">${totalQty}</td>
+          <td style="border: 1px solid #000; padding: 6px 6px;"></td>
         </tr>
       </tfoot>
     </table>
 
-    <div style="margin: 10px 0; font-size: 10.5pt; font-style: italic;">
-      * Tổng số lượng tiêu hủy: <strong>${totalQty}</strong> đơn vị thuốc.
+    <!-- Total Note & Conclusion -->
+    <div style="margin: 8px 0; font-size: 11pt; font-style: italic; font-family: 'Times New Roman', serif;">
+      * Tổng số lượng tiêu hủy: <strong>${totalQty} đơn vị thuốc.</strong>
     </div>
 
-    <table class="signatures-table" style="margin-top: 25px;">
+    <div style="margin: 10px 0 25px 0; font-size: 11pt; line-height: 1.5; text-align: justify; font-family: 'Times New Roman', serif;">
+      Hội đồng đã tiến hành tiêu hủy đúng quy trình kỹ thuật, đảm bảo an toàn tuyệt đối và vệ sinh môi trường. Biên bản được lập thành ${hasAccountant ? '03' : '02'} bản có giá trị pháp lý như nhau (01 bản lưu hồ sơ y tế, 01 bản nộp Ban Giám Hiệu${hasAccountant ? ', 01 bản nộp bộ phận Kế toán' : ''}).
+    </div>
+
+    <!-- Signatures: P. HIỆU TRƯỞNG on left, NHÂN VIÊN Y TẾ on right exactly as attached PDF -->
+    <table class="signatures-table" style="margin-top: 25px; width: 100%; border-collapse: collapse; border: none; font-family: 'Times New Roman', serif;">
       <tr>
-        <td style="width: 25%;">
-          <div class="signature-title">THƯ KÝ HỘI ĐỒNG</div>
-          <div class="signature-sub">(Ký và ghi rõ họ tên)</div>
-          <div class="signature-space"></div>
-          <div class="signature-name">${disposal.councilMembers?.find(m => m.roleTitle.toLowerCase().includes('thư ký'))?.name || 'Cán bộ Y tế'}</div>
-        </td>
-        <td style="width: 25%;">
-          <div class="signature-title">KẾ TOÁN TRƯỜNG</div>
-          <div class="signature-sub">(Ký và ghi rõ họ tên)</div>
-          <div class="signature-space"></div>
-          <div class="signature-name">${disposal.councilMembers?.find(m => m.roleTitle.toLowerCase().includes('kế toán') || m.position.toLowerCase().includes('kế toán'))?.name || 'Kế toán trường'}</div>
-        </td>
-        <td style="width: 25%;">
-          <div class="signature-title">ĐẠI DIỆN GIÁM SÁT</div>
-          <div class="signature-sub">(Ký và ghi rõ họ tên)</div>
-          <div class="signature-space"></div>
-          <div class="signature-name">${disposal.councilMembers?.find(m => m.roleTitle.toLowerCase().includes('giám sát') || m.roleTitle.toLowerCase().includes('ủy viên'))?.name || 'Đại diện giám sát'}</div>
-        </td>
-        <td style="width: 25%;">
-          <div class="signature-title">CHỦ TỊCH HỘI ĐỒNG</div>
-          <div class="signature-sub">(Ký, đóng dấu duyệt)</div>
-          <div class="signature-space"></div>
-          <div class="signature-name">${disposal.councilMembers?.find(m => m.roleTitle.toLowerCase().includes('chủ tịch'))?.name || 'Hiệu Trưởng / Phó Hiệu Trưởng'}</div>
-        </td>
+        ${signersList
+          .map(
+            (s) => `
+          <td style="width: ${colWidth}%; vertical-align: top; text-align: center; padding: 0 10px; border: none;">
+            <div style="font-weight: bold; text-transform: uppercase; font-size: 11pt; line-height: 1.3; color: #000;">
+              ${s.roleTitle || 'NGƯỜI KÝ'}
+            </div>
+            ${s.signNote ? `<div style="font-size: 9.5pt; font-style: italic; color: #475569; margin-top: 2px;">${s.signNote}</div>` : ''}
+            ${s.signatureContent && s.signatureContent.trim() ? `
+              <div style="min-height: 70px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-style: italic; color: #1e3a8a; font-weight: 600; padding: 6px 0; font-family: 'Times New Roman', serif; font-size: 11pt;">
+                ${s.signatureContent}
+              </div>
+            ` : `
+              <div style="height: 70px;"></div>
+            `}
+            <div style="font-weight: bold; font-size: 11pt; color: #000;">
+              ${s.name}
+            </div>
+          </td>
+        `
+          )
+          .join('')}
       </tr>
     </table>
   `;
@@ -1370,3 +1584,184 @@ export function printClinicVisitReceiptA4(
 
   openPrintWindow(content, false, `Phieu_Cham_Soc_Y_Te_${visit.visitCode}`);
 }
+
+// =========================================================================
+// MẪU IN BÁO CÁO CẤP PHÁT BĂNG VỆ SINH CHO HỌC SINH NỮ (CHUẨN BỘ Y TẾ & GDĐT)
+// =========================================================================
+export function printSanitaryNapkinReportA4(reportData: {
+  periodLabel: string;
+  startDate: string;
+  endDate: string;
+  totalDispatchCount: number;
+  totalDispatchedPieces: number;
+  totalImportedPieces: number;
+  totalCurrentStock: number;
+  dispatches: SanitaryNapkinDispatch[];
+  imports: SanitaryNapkinImport[];
+  byProduct: { product: SanitaryNapkinProduct; pieces: number; count: number }[];
+  byClass: { className: string; pieces: number; count: number }[];
+  bySource: { source: string; pieces: number; count: number }[];
+  privacyNote: string;
+}, schoolName = 'TRƯỜNG THCS ĐÔNG THẠNH', customSigners?: {
+  title1?: string;
+  name1?: string;
+  title2?: string;
+  name2?: string;
+}) {
+  const config = templateConfigService.getConfig();
+  const title1 = customSigners?.title1 || config.signatory1Title || 'CÁN BỘ Y TẾ HỌC ĐƯỜNG';
+  const name1 = customSigners?.name1 || config.signatory1Name || 'Cô Đoàn Thị Minh Trang';
+  const title2 = customSigners?.title2 || config.signatory2Title || 'HIỆU TRƯỞNG / BAN GIÁM HIỆU';
+  const name2 = customSigners?.name2 || config.signatory2Name || 'Ban Giám Hiệu';
+  const now = new Date();
+
+  const productRows = reportData.byProduct
+    .map(
+      (item, idx) => `
+      <tr>
+        <td style="text-align: center; border: 1px solid #334155; padding: 6px;">${idx + 1}</td>
+        <td style="border: 1px solid #334155; padding: 6px; font-weight: 600;">${item.product.name}</td>
+        <td style="border: 1px solid #334155; padding: 6px; text-align: center;">${item.product.brand || '---'}</td>
+        <td style="border: 1px solid #334155; padding: 6px; text-align: center;">miếng</td>
+        <td style="border: 1px solid #334155; padding: 6px; text-align: right; font-weight: bold;">${item.product.stockQuantity}</td>
+        <td style="border: 1px solid #334155; padding: 6px; text-align: right;">${item.count}</td>
+        <td style="border: 1px solid #334155; padding: 6px; text-align: right; font-weight: bold; color: #be185d;">${item.pieces}</td>
+        <td style="border: 1px solid #334155; padding: 6px; text-align: center;">
+          ${item.product.stockQuantity <= item.product.minAlertThreshold ? '<span style="color: #b91c1c; font-weight: bold;">⚠️ Dưới ngưỡng</span>' : '<span style="color: #15803d;">Đảm bảo</span>'}
+        </td>
+      </tr>
+    `
+    )
+    .join('');
+
+  const classRows = reportData.byClass
+    .map(
+      (c, idx) => `
+      <tr>
+        <td style="text-align: center; border: 1px solid #334155; padding: 5px;">${idx + 1}</td>
+        <td style="border: 1px solid #334155; padding: 5px; font-weight: bold; text-align: center;">${c.className}</td>
+        <td style="border: 1px solid #334155; padding: 5px; text-align: right;">${c.count} lượt</td>
+        <td style="border: 1px solid #334155; padding: 5px; text-align: right; font-weight: bold; color: #be185d;">${c.pieces} miếng</td>
+      </tr>
+    `
+    )
+    .join('');
+
+  const content = `
+    <table class="report-header-table" style="width: 100%; margin-bottom: 15px;">
+      <tr>
+        <td style="width: 50%; text-align: center; vertical-align: top;">
+          <div style="font-size: 10pt; text-transform: uppercase;">UBND XÃ ĐÔNG THẠNH</div>
+          <div style="font-size: 11pt; font-weight: bold; text-transform: uppercase;">${schoolName}</div>
+          <div style="font-size: 10pt; font-style: italic;">Bộ phận Y tế Học đường</div>
+          <div style="margin-top: 3px; font-size: 9pt;">Số: ......./BC-YTHĐ</div>
+        </td>
+        <td style="width: 50%; text-align: center; vertical-align: top;">
+          <div style="font-size: 11pt; font-weight: bold;">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</div>
+          <div style="font-size: 11pt; font-weight: bold;">Độc lập - Tự do - Hạnh phúc</div>
+          <div style="font-size: 10pt; font-style: italic; margin-top: 6px;">
+            Đông Thạnh, ngày ${now.getDate()} tháng ${now.getMonth() + 1} năm ${now.getFullYear()}
+          </div>
+        </td>
+      </tr>
+    </table>
+
+    <div style="text-align: center; margin: 15px 0 10px 0;">
+      <h2 style="font-size: 15pt; font-weight: bold; text-transform: uppercase; margin: 0 0 4px 0; color: #831843;">
+        BÁO CÁO CÔNG TÁC CẤP PHÁT BĂNG VỆ SINH CHO HỌC SINH NỮ
+      </h2>
+      <div style="font-size: 11pt; font-weight: bold; font-style: italic; color: #475569;">
+        Kỳ báo cáo: ${reportData.periodLabel}
+      </div>
+      <div style="font-size: 9.5pt; font-style: italic; color: #0284c7; margin-top: 3px;">
+        (Căn cứ Thông tư liên tịch số 13/2016/TTLT-BYT-BGDĐT về Công tác Y tế trường học & Chăm sóc sức khỏe vị thành niên)
+      </div>
+    </div>
+
+    <div style="background-color: #fdf2f8; border: 1px solid #fbcfe8; border-radius: 6px; padding: 10px; margin-bottom: 15px; font-size: 10pt;">
+      <div style="font-weight: bold; color: #9d174d; margin-bottom: 5px;">I. SỐ LIỆU TỔNG HỢP TOÀN TRƯỜNG:</div>
+      <table style="width: 100%; font-size: 10pt;">
+        <tr>
+          <td style="width: 50%;">• <strong>Tổng số lượt cấp phát hỗ trợ:</strong> <span style="font-size: 11pt; font-weight: bold; color: #be185d;">${reportData.totalDispatchCount}</span> lượt</td>
+          <td style="width: 50%;">• <strong>Tổng số miếng đã cấp:</strong> <span style="font-size: 11pt; font-weight: bold; color: #be185d;">${reportData.totalDispatchedPieces}</span> miếng</td>
+        </tr>
+        <tr>
+          <td>• <strong>Tổng số miếng tiếp nhận nhập kho trong kỳ:</strong> <strong>${reportData.totalImportedPieces}</strong> miếng</td>
+          <td>• <strong>Tổng số lượng tồn kho hiện tại:</strong> <strong style="color: #15803d;">${reportData.totalCurrentStock}</strong> miếng</td>
+        </tr>
+        <tr>
+          <td colspan="2" style="padding-top: 4px; font-style: italic; color: #64748b; font-size: 9pt;">
+            * Ghi chú nguyên tắc bảo mật: "${reportData.privacyNote}"
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <div style="font-weight: bold; text-transform: uppercase; font-size: 10.5pt; margin-bottom: 6px;">
+      II. BẢNG CHI TIẾT THEO TỪNG LOẠI SẢN PHẨM:
+    </div>
+    <table style="width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-bottom: 15px;">
+      <thead>
+        <tr style="background-color: #f8fafc;">
+          <th style="width: 35px; border: 1px solid #334155; padding: 6px;">STT</th>
+          <th style="border: 1px solid #334155; padding: 6px;">Loại sản phẩm BVS</th>
+          <th style="width: 90px; border: 1px solid #334155; padding: 6px;">Nhãn hiệu</th>
+          <th style="width: 50px; border: 1px solid #334155; padding: 6px;">ĐVT</th>
+          <th style="width: 80px; border: 1px solid #334155; padding: 6px;">Tồn kho</th>
+          <th style="width: 75px; border: 1px solid #334155; padding: 6px;">Số lượt</th>
+          <th style="width: 85px; border: 1px solid #334155; padding: 6px;">Số miếng cấp</th>
+          <th style="width: 90px; border: 1px solid #334155; padding: 6px;">Tình trạng</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${productRows}
+        <tr style="font-weight: bold; background-color: #f1f5f9;">
+          <td colspan="4" style="text-align: center; border: 1px solid #334155; padding: 6px;">TỔNG CỘNG</td>
+          <td style="text-align: right; border: 1px solid #334155; padding: 6px;">${reportData.totalCurrentStock}</td>
+          <td style="text-align: right; border: 1px solid #334155; padding: 6px;">${reportData.totalDispatchCount}</td>
+          <td style="text-align: right; border: 1px solid #334155; padding: 6px; color: #be185d;">${reportData.totalDispatchedPieces}</td>
+          <td style="text-align: center; border: 1px solid #334155; padding: 6px;">---</td>
+        </tr>
+      </tbody>
+    </table>
+
+    ${reportData.byClass.length > 0 ? `
+      <div style="font-weight: bold; text-transform: uppercase; font-size: 10.5pt; margin-bottom: 6px;">
+        III. THỐNG KÊ CẤP PHÁT THEO LỚP HỌC (Không lưu tên học sinh):
+      </div>
+      <table style="width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-bottom: 20px;">
+        <thead>
+          <tr style="background-color: #f8fafc;">
+            <th style="width: 40px; border: 1px solid #334155; padding: 5px;">STT</th>
+            <th style="border: 1px solid #334155; padding: 5px;">Lớp tiếp nhận</th>
+            <th style="width: 140px; border: 1px solid #334155; padding: 5px;">Số lượt hỗ trợ</th>
+            <th style="width: 160px; border: 1px solid #334155; padding: 5px;">Tổng số miếng đã nhận</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${classRows}
+        </tbody>
+      </table>
+    ` : ''}
+
+    <table class="signatures-table" style="width: 100%; margin-top: 25px;">
+      <tr>
+        <td style="width: 50%; text-align: center; vertical-align: top;">
+          <div style="font-size: 10.5pt; font-weight: bold;">${title1}</div>
+          <div style="font-size: 9pt; font-style: italic;">(Ký và ghi rõ họ tên)</div>
+          <div style="height: 65px;"></div>
+          <div style="font-size: 10.5pt; font-weight: bold;">${name1}</div>
+        </td>
+        <td style="width: 50%; text-align: center; vertical-align: top;">
+          <div style="font-size: 10.5pt; font-weight: bold;">${title2}</div>
+          <div style="font-size: 9pt; font-style: italic;">(Ký, đóng dấu xác nhận)</div>
+          <div style="height: 65px;"></div>
+          <div style="font-size: 10.5pt; font-weight: bold;">${name2}</div>
+        </td>
+      </tr>
+    </table>
+  `;
+
+  openPrintWindow(content, false, `Bao_Cao_BVS_Nu_Sinh_${reportData.startDate}_${reportData.endDate}`);
+}
+

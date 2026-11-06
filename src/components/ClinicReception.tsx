@@ -45,6 +45,7 @@ import {
 import { CLINIC_REASONS, CLINIC_TREATMENTS } from '../services/studentData';
 import { Student, Medicine, MedicalSupply, ClinicVisit } from '../types';
 import { printClinicVisitReceiptA4 } from '../services/printA4Service';
+import { templateConfigService } from '../services/templateConfigService';
 import { DateInputVN } from './DateInputVN';
 
 interface WeightDosageEvaluation {
@@ -626,7 +627,10 @@ export const ClinicReception: React.FC<ClinicReceptionProps> = ({
 
   // Treatment & Performer
   const [treatment, setTreatment] = useState('Nghỉ ngơi, theo dõi');
-  const [performer, setPerformer] = useState(currentUser.fullName || currentUser.name || 'Y sĩ Trần Thị Bích Thảo');
+  const [performer, setPerformer] = useState(
+    () => templateConfigService.getConfig().signatory1Name || currentUser.fullName || currentUser.name || 'Cô Đoàn Thị Minh Trang'
+  );
+  const [signatureNote, setSignatureNote] = useState('');
 
   // Medicines Dispensed state
   const [medicinesToDispense, setMedicinesToDispense] = useState<
@@ -875,6 +879,7 @@ export const ClinicReception: React.FC<ClinicReceptionProps> = ({
         isTransferred: isTransfer,
         transferHospital: isTransfer ? transferHospital : undefined,
         performer,
+        signatureNote: signatureNote.trim() || undefined,
         notes: notes || undefined,
       });
 
@@ -916,6 +921,7 @@ export const ClinicReception: React.FC<ClinicReceptionProps> = ({
     setRespiratoryRate('');
     setSpO2('');
     setTreatment('Nghỉ ngơi, theo dõi');
+    setSignatureNote('');
     setMedicinesToDispense([]);
     setSuppliesToUse([]);
     setOutcome('Đã ổn định cho về lớp');
@@ -2021,7 +2027,7 @@ export const ClinicReception: React.FC<ClinicReceptionProps> = ({
             <h2 className="font-bold text-slate-900 text-sm">Biện Pháp Xử Trí Chăm Sóc</h2>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">Biện pháp xử trí</label>
               <select
@@ -2044,6 +2050,19 @@ export const ClinicReception: React.FC<ClinicReceptionProps> = ({
                 required
                 value={performer}
                 onChange={(e) => setPerformer(e.target.value)}
+                className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2 font-medium"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Ký nhận vào sổ <span className="text-[10px] text-slate-500 font-normal">(Tự điền / Ký tay)</span>
+              </label>
+              <input
+                type="text"
+                value={signatureNote}
+                onChange={(e) => setSignatureNote(e.target.value)}
+                placeholder="Để trống ký tay hoặc gõ chữ ký..."
                 className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2 font-medium"
               />
             </div>

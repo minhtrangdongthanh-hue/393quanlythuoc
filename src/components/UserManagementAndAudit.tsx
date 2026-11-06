@@ -38,15 +38,15 @@ export const UserManagementAndAudit: React.FC = () => {
     );
   }, [logs, searchQuery]);
 
-  if (!db.canAccessTab('audit_logs') || currentUser?.role !== 'admin') {
+  if (!db.canAccessTab('audit_logs')) {
     return null;
   }
 
   const handleExportLogs = () => {
-    const headers = ['Thời gian', 'Nhiệm vụ thực hiện', 'Phân quyền', 'Hành động', 'Chi tiết thao tác'];
+    const headers = ['Thời gian', 'Thành viên thực hiện', 'Vai trò', 'Hành động', 'Chi tiết thao tác'];
     const rows = filteredLogs.map((l) => [
       formatDateTimeVN(l.timestamp),
-      l.userRole === 'admin' || (l as any).role === 'admin' ? 'Quản trị' : 'Nhân viên Y tế',
+      l.userName || 'Thành viên',
       l.userRole === 'admin' || (l as any).role === 'admin' ? 'Quản trị' : 'Nhân viên Y tế',
       l.action,
       l.details,
@@ -127,30 +127,39 @@ export const UserManagementAndAudit: React.FC = () => {
             <thead className="bg-white text-slate-600 border-b border-slate-200 uppercase font-bold text-[10px]">
               <tr>
                 <th className="py-2.5 px-3">Thời gian</th>
-                <th className="py-2.5 px-3">Nhiệm vụ thực hiện</th>
-                <th className="py-2.5 px-3">Mã phân quyền</th>
+                <th className="py-2.5 px-3">Thành viên thực hiện</th>
+                <th className="py-2.5 px-3">Vai trò</th>
                 <th className="py-2.5 px-3">Hành động</th>
                 <th className="py-2.5 px-3">Chi tiết</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredLogs.map((log) => {
-                const isAdminRole = (log.userRole || (log as any).role) === 'admin' || (log.userRole || (log as any).role) === 'bgh';
+                const roleCode = log.userRole || (log as any).role;
+                const isAdminRole = roleCode === 'admin' || roleCode === 'bgh';
                 return (
                   <tr key={log.id} className="hover:bg-slate-50">
                     <td className="py-2.5 px-3 font-mono text-slate-500 whitespace-nowrap">
                       {formatDateTimeVN(log.timestamp)}
                     </td>
                     <td className="py-2.5 px-3 font-bold text-slate-900">
-                      {isAdminRole ? 'Quản trị' : 'Nhân viên Y tế'}
+                      {log.userName || (isAdminRole ? 'Quản trị viên' : 'Nhân viên Y tế')}
                     </td>
                     <td className="py-2.5 px-3">
                       <span
                         className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          isAdminRole ? 'bg-indigo-100 text-indigo-800' : 'bg-emerald-100 text-emerald-800'
+                          roleCode === 'admin'
+                            ? 'bg-indigo-100 text-indigo-800'
+                            : roleCode === 'bgh'
+                            ? 'bg-purple-100 text-purple-800'
+                            : 'bg-emerald-100 text-emerald-800'
                         }`}
                       >
-                        {isAdminRole ? 'Quản trị (ADMIN)' : 'Nhân viên Y tế (MEDIC)'}
+                        {roleCode === 'admin'
+                          ? 'Quản trị (ADMIN)'
+                          : roleCode === 'bgh'
+                          ? 'Ban Giám Hiệu (BGH)'
+                          : 'Nhân viên Y tế (MEDIC)'}
                       </span>
                     </td>
                     <td className="py-2.5 px-3 font-semibold text-slate-800">{log.action}</td>

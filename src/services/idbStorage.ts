@@ -22,9 +22,16 @@ export interface OperationalMasterBundle {
   healthCheckups?: any[];
   users?: any[];
   staffMembers?: any[];
+  sanitaryProducts?: any[];
+  sanitaryDispatches?: any[];
+  sanitaryImports?: any[];
+  sanitarySettings?: any;
   settings?: any;
   deletedVisitIds?: string[];
   deletedUserIds?: string[];
+  deletedSanitaryProductIds?: string[];
+  deletedSanitaryDispatchIds?: string[];
+  deletedSanitaryImportIds?: string[];
   inventoryUpdatedAt?: number;
   updatedAt: string;
 }

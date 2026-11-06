@@ -7,12 +7,17 @@ import {
   InventoryCheck,
   StockInOutBalanceRow,
   MedicineDisposal,
+  DisposalCouncilMember,
   HealthEvent,
   HealthCheckup,
   SchoolClass,
   SchoolStaff,
+  SanitaryNapkinProduct,
+  SanitaryNapkinDispatch,
+  SanitaryNapkinImport,
 } from '../types';
 import { formatDateVN, formatDateTimeVN, formatDateFormulaVN, getDaysRemaining, formatTime24H } from './db';
+import { templateConfigService } from './templateConfigService';
 
 // Helper to get formatted date string for file names: YYYY_MM_DD
 export function getFilenameDate(): string {
@@ -1093,12 +1098,92 @@ export function exportMonthlyComprehensiveReportExcel(
   saveWorkbook(wb, `Bao_Cao_Y_Te_Thang_${selectedMonth}_THCS_Dong_Thanh_${getFilenameDate()}.xlsx`);
 }
 
-// Xuất file Excel Biên bản tiêu hủy thuốc hết hạn
+// Xuất file Excel Biên bản tiêu hủy thuốc hết hạn chuẩn Bộ Y tế & GDĐT
 export function exportDisposalExcel(
   disposal: MedicineDisposal,
   schoolName = 'TRƯỜNG THCS ĐÔNG THẠNH'
 ) {
   const wb = XLSX.utils.book_new();
+
+  const cfg = templateConfigService.getConfig();
+  const governingBody =
+    cfg.governingBody && cfg.governingBody !== 'PHÒNG GD&ĐT HUYỆN HÓC MÔN'
+      ? cfg.governingBody
+      : 'UBND XÃ ĐÔNG THẠNH';
+  const effectiveSchoolName = schoolName || cfg.schoolName || 'TRƯỜNG THCS ĐÔNG THẠNH';
+
+  const rawMembers = disposal.councilMembers || [];
+  const bgh = rawMembers.find(
+    (m) =>
+      m.roleTitle.toLowerCase().includes('hiệu trưởng') ||
+      m.roleTitle.toLowerCase().includes('chủ tịch') ||
+      m.position.toLowerCase().includes('giám hiệu')
+  ) || rawMembers[0] || {
+    roleTitle: 'P. HIỆU TRƯỞNG',
+    name: 'Trần Thị Thanh Hiền',
+    position: 'Phó Hiệu trưởng',
+    signNote: '',
+  };
+
+  const medic = rawMembers.find(
+    (m) =>
+      m.roleTitle.toLowerCase().includes('y tế') ||
+      m.roleTitle.toLowerCase().includes('thư ký') ||
+      m.position.toLowerCase().includes('y tế')
+  ) || (rawMembers.length > 1 ? rawMembers[1] : null) || {
+    roleTitle: 'NHÂN VIÊN Y TẾ',
+    name: 'Đoàn Thị Minh Trang',
+    position: 'Phụ trách Phòng Y tế học đường',
+    signNote: '',
+  };
+
+  const acc = rawMembers.find(
+    (m) =>
+      m.roleTitle.toLowerCase().includes('kế toán') ||
+      m.position.toLowerCase().includes('kế toán')
+  );
+
+  const hasAccountant = Boolean(acc && acc.name && acc.name.trim() !== '');
+  const extras = rawMembers.filter((m) => m !== bgh && m !== medic && m !== acc);
+
+  const displayCouncil: DisposalCouncilMember[] = [
+    { ...bgh, roleTitle: bgh.roleTitle || 'P. HIỆU TRƯỞNG', name: bgh.name, position: bgh.position || 'Phó Hiệu trưởng' },
+    { ...medic, roleTitle: medic.roleTitle || 'NHÂN VIÊN Y TẾ', name: medic.name, position: medic.position || 'Phụ trách Phòng Y tế học đường' },
+  ];
+  if (hasAccountant && acc) {
+    displayCouncil.push({
+      ...acc,
+      roleTitle: acc.roleTitle || 'KẾ TOÁN TRƯỜNG',
+      name: acc.name,
+      position: acc.position || 'Kế toán trường',
+    });
+  }
+  extras.forEach((ext) => displayCouncil.push(ext));
+
+  const totalQty = (disposal.items || []).reduce((s, i) => s + (i.disposalQuantity || 0), 0);
+  const dateParts = (disposal.disposalDate || new Date().toISOString().split('T')[0]).split('-');
+  const dateStr = `${cfg.location || 'Đông Thạnh'}, ngày ${Number(dateParts[2])} tháng ${Number(dateParts[1])} năm ${dateParts[0]}`;
+
+  const sheetAoa: (string | number)[][] = [
+    [governingBody.toUpperCase(), '', '', '', 'CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM'],
+    [effectiveSchoolName.toUpperCase(), '', '', '', 'Độc lập - Tự do - Hạnh phúc'],
+    ['Số: ……../BB-HUY', '', '', '', dateStr],
+    [''],
+    ['BIÊN BẢN TIÊU HỦY THUỐC VÀ VẬT TƯ Y TẾ HẾT HẠN'],
+    [`Số biên bản: ${disposal.disposalCode} • Ngày lập: ${formatDateVN(disposal.disposalDate)}`],
+    [''],
+    ['Căn cứ Thông tư liên tịch số 13/2016/TTLT-BYT-BGDĐT ngày 12/5/2016 của Bộ Y tế và Bộ GD&ĐT quy định về công tác y tế trường học;'],
+    [disposal.decisionNumber ? `Căn cứ Quyết định số ${disposal.decisionNumber} của Hiệu trưởng về việc thành lập Hội đồng tiêu hủy thuốc và vật tư y tế;` : ''],
+    [`Hôm nay, ngày ${formatDateVN(disposal.disposalDate)}, tại ${disposal.disposalLocation || 'Phòng Y tế'}, Hội đồng tiến hành tiêu hủy gồm có:`],
+  ];
+
+  displayCouncil.forEach((m, idx) => {
+    sheetAoa.push([`${idx + 1}. Ông/Bà: ${m.name}`, '', `Chức vụ: ${m.position || m.roleTitle}`]);
+  });
+
+  sheetAoa.push([`Phương pháp tiêu hủy: ${disposal.disposalMethod || 'Hòa tan, trung hòa bất hoạt và chuyển bao gói rác thải y tế chuyên trách'}`]);
+  sheetAoa.push([`Ghi nhận: ${disposal.witnessNotes || 'Đã kiểm tra đúng chủng loại, số lượng, niêm phong và tiêu hủy an toàn theo quy định.'}`]);
+  sheetAoa.push(['']);
 
   const headers = [
     'STT',
@@ -1110,40 +1195,89 @@ export function exportDisposalExcel(
     'Số lượng hủy',
     'Lý do tiêu hủy',
   ];
+  sheetAoa.push(headers);
 
-  const dataRows = (disposal.items || []).map((item, idx) => [
-    idx + 1,
-    item.medicineCode,
-    item.medicineName + (item.activeIngredient ? ` (${item.activeIngredient})` : ''),
-    item.batchNumber,
-    formatDateVN(item.expDate),
-    item.unit,
-    item.disposalQuantity,
-    item.reason || 'Hết hạn sử dụng',
-  ]);
+  (disposal.items || []).forEach((item, idx) => {
+    sheetAoa.push([
+      idx + 1,
+      item.medicineCode,
+      item.medicineName + (item.activeIngredient ? ` (${item.activeIngredient})` : ''),
+      item.batchNumber,
+      formatDateVN(item.expDate),
+      item.unit,
+      item.disposalQuantity,
+      item.reason || 'Hết hạn sử dụng',
+    ]);
+  });
 
-  const totalQty = (disposal.items || []).reduce((s, i) => s + (i.disposalQuantity || 0), 0);
-
-  const summaryRow = [
+  sheetAoa.push([
     'TỔNG CỘNG',
     '',
-    `${disposal.items?.length || 0} mặt hàng`,
+    `${disposal.items?.length || 0} khoản mục`,
     '',
     '',
     '',
     totalQty,
     '',
+  ]);
+
+  sheetAoa.push(['']);
+  sheetAoa.push([`* Tổng số lượng tiêu hủy: ${totalQty} đơn vị thuốc.`]);
+  sheetAoa.push([`Hội đồng đã tiến hành tiêu hủy đúng quy trình kỹ thuật. Biên bản được lập thành ${hasAccountant ? '03' : '02'} bản có giá trị pháp lý như nhau.`]);
+  sheetAoa.push(['']);
+
+  // Signatures table: P. HIỆU TRƯỞNG on left, Kế toán in middle (if any), NHÂN VIÊN Y TẾ on right
+  const signersList: DisposalCouncilMember[] = [
+    bgh,
+    ...(hasAccountant && acc ? [acc] : []),
+    ...extras,
+    medic,
   ];
 
-  const filterInfo = `Số biên bản: ${disposal.disposalCode} • QĐ số: ${disposal.decisionNumber || 'Chưa có'} • Ngày: ${formatDateVN(disposal.disposalDate)} • Phương pháp: ${disposal.disposalMethod || 'Theo quy định'}`;
+  if (signersList.length === 2) {
+    sheetAoa.push(['', signersList[0].roleTitle, '', '', '', '', signersList[1].roleTitle, '']);
+    sheetAoa.push(['', signersList[0].signNote || '(Ký, đóng dấu)', '', '', '', '', signersList[1].signNote || '(Ký, ghi rõ họ tên)', '']);
+    sheetAoa.push(['', signersList[0].signatureContent || '', '', '', '', '', signersList[1].signatureContent || '', '']);
+    sheetAoa.push(['']);
+    sheetAoa.push(['']);
+    sheetAoa.push(['', signersList[0].name, '', '', '', '', signersList[1].name, '']);
+  } else if (signersList.length === 3) {
+    sheetAoa.push(['', signersList[0].roleTitle, '', signersList[1].roleTitle, '', '', signersList[2].roleTitle, '']);
+    sheetAoa.push(['', signersList[0].signNote || '(Ký, đóng dấu)', '', signersList[1].signNote || '(Ký, ghi họ tên)', '', '', signersList[2].signNote || '(Ký, ghi họ tên)', '']);
+    sheetAoa.push(['', signersList[0].signatureContent || '', '', signersList[1].signatureContent || '', '', '', signersList[2].signatureContent || '', '']);
+    sheetAoa.push(['']);
+    sheetAoa.push(['']);
+    sheetAoa.push(['', signersList[0].name, '', signersList[1].name, '', '', signersList[2].name, '']);
+  } else {
+    const titlesRow: (string | number)[] = [''];
+    const notesRow: (string | number)[] = [''];
+    const contentsRow: (string | number)[] = [''];
+    const namesRow: (string | number)[] = [''];
+    signersList.forEach((s) => {
+      titlesRow.push(s.roleTitle, '');
+      notesRow.push(s.signNote || '(Ký, họ tên)', '');
+      contentsRow.push(s.signatureContent || '', '');
+      namesRow.push(s.name, '');
+    });
+    sheetAoa.push(titlesRow);
+    sheetAoa.push(notesRow);
+    sheetAoa.push(contentsRow);
+    sheetAoa.push(['']);
+    sheetAoa.push(['']);
+    sheetAoa.push(namesRow);
+  }
 
-  const ws = createReportSheet(
-    `BIÊN BẢN TIÊU HỦY THUỐC VÀ VẬT TƯ Y TẾ HẾT HẠN - ${disposal.disposalCode}`,
-    filterInfo,
-    headers,
-    dataRows,
-    summaryRow
-  );
+  const ws = XLSX.utils.aoa_to_sheet(sheetAoa);
+  ws['!cols'] = [
+    { wch: 6 },
+    { wch: 14 },
+    { wch: 32 },
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 10 },
+    { wch: 14 },
+    { wch: 25 },
+  ];
 
   XLSX.utils.book_append_sheet(wb, ws, 'Bien_Ban_Tieu_Huy');
   saveWorkbook(wb, `Bien_Ban_Tieu_Huy_${disposal.disposalCode.replace(/[^a-zA-Z0-9_-]/g, '_')}_${getFilenameDate()}.xlsx`);
@@ -1946,5 +2080,163 @@ export function exportStaffMembersExcel(staffList: SchoolStaff[]) {
   XLSX.utils.book_append_sheet(wb, ws, 'DanhBa_GV_CNV');
   saveWorkbook(wb, `Danh_Ba_Giao_Vien_CNV_${getFilenameDate()}.xlsx`);
 }
+
+// =========================================================================
+// XUẤT EXCEL BÁO CÁO CẤP PHÁT BĂNG VỆ SINH CHO HỌC SINH NỮ (CHUẨN BẢO MẬT)
+// =========================================================================
+export function exportSanitaryNapkinReportExcel(reportData: {
+  periodLabel: string;
+  startDate: string;
+  endDate: string;
+  totalDispatchCount: number;
+  totalDispatchedPieces: number;
+  totalImportedPieces: number;
+  totalCurrentStock: number;
+  dispatches: SanitaryNapkinDispatch[];
+  imports: SanitaryNapkinImport[];
+  byProduct: { product: SanitaryNapkinProduct; pieces: number; count: number }[];
+  byClass: { className: string; pieces: number; count: number }[];
+  bySource: { source: string; pieces: number; count: number }[];
+  privacyNote: string;
+}, schoolName = 'TRƯỜNG THCS ĐÔNG THẠNH') {
+  const wb = XLSX.utils.book_new();
+
+  // SHEET 1: BÁO CÁO TỔNG HỢP THEO KỲ
+  const summaryHeaders = [
+    'STT',
+    'Tên loại sản phẩm BVS',
+    'Thương hiệu',
+    'ĐVT',
+    'Tồn kho hiện tại (miếng)',
+    'Ngưỡng cảnh báo',
+    'Số lượt cấp trong kỳ',
+    'Tổng số miếng đã cấp',
+    'Tình trạng kho',
+  ];
+
+  const summaryRows = reportData.byProduct.map((item, idx) => {
+    const isLow = item.product.stockQuantity <= item.product.minAlertThreshold;
+    return [
+      idx + 1,
+      item.product.name,
+      item.product.brand || '---',
+      'miếng',
+      item.product.stockQuantity,
+      item.product.minAlertThreshold,
+      item.count,
+      item.pieces,
+      isLow ? '⚠️ Cần nhập thêm' : 'Ổn định',
+    ];
+  });
+
+  const wsSummary = createReportSheet(
+    'BÁO CÁO TỔNG HỢP CẤP PHÁT BĂNG VỆ SINH HỌC SINH NỮ',
+    `${schoolName} • ${reportData.periodLabel} (Tổng: ${reportData.totalDispatchCount} lượt cấp • ${reportData.totalDispatchedPieces} miếng)`,
+    summaryHeaders,
+    summaryRows,
+    [
+      'TỔNG CỘNG',
+      'Toàn bộ sản phẩm',
+      '',
+      'miếng',
+      reportData.totalCurrentStock,
+      '',
+      reportData.totalDispatchCount,
+      reportData.totalDispatchedPieces,
+      reportData.privacyNote,
+    ]
+  );
+  XLSX.utils.book_append_sheet(wb, wsSummary, 'BaoCao_TongHop');
+
+  // SHEET 2: TỔNG HỢP THEO LỚP
+  const classHeaders = ['STT', 'Lớp học', 'Số lượt hỗ trợ (lần)', 'Tổng số miếng đã cấp (miếng)'];
+  const classRows = reportData.byClass.map((c, idx) => [
+    idx + 1,
+    c.className,
+    c.count,
+    c.pieces,
+  ]);
+  const wsClass = createReportSheet(
+    'THỐNG KÊ CẤP PHÁT THEO LỚP HỌC',
+    `Thời gian: ${reportData.periodLabel} • Không định danh học sinh cụ thể`,
+    classHeaders,
+    classRows,
+    ['TỔNG CỘNG', `${reportData.byClass.length} lớp tiếp nhận`, reportData.totalDispatchCount, reportData.totalDispatchedPieces]
+  );
+  XLSX.utils.book_append_sheet(wb, wsClass, 'Theo_Lop');
+
+  // SHEET 3: NHẬT KÝ CẤP PHÁT CHI TIẾT (Bảo mật 100% - Không lưu danh tính học sinh)
+  const dispatchHeaders = [
+    'STT',
+    'Mã phiếu cấp',
+    'Ngày giờ cấp',
+    'Lớp tiếp nhận',
+    'Loại sản phẩm',
+    'Số lượng (miếng)',
+    'Cán bộ cấp',
+    'Ghi chú',
+    'Trạng thái',
+  ];
+
+  const dispatchRows = reportData.dispatches.map((d, idx) => [
+    idx + 1,
+    d.dispatchCode,
+    formatDateTimeVN(d.dateTime),
+    d.className,
+    d.productName,
+    d.quantity,
+    d.dispenserName,
+    d.notes || '',
+    d.status === 'completed' ? 'Hoàn tất' : `Đã hủy (${d.cancelReason || ''})`,
+  ]);
+
+  const wsDispatches = createReportSheet(
+    'SỔ THEO DÕI CẤP PHÁT BĂNG VỆ SINH CHO HỌC SINH NỮ',
+    `Kỳ báo cáo: ${reportData.periodLabel} • Bảo mật thông tin riêng tư học sinh`,
+    dispatchHeaders,
+    dispatchRows,
+    ['TỔNG CỘNG', `${reportData.dispatches.length} lượt cấp`, '', '', '', reportData.totalDispatchedPieces]
+  );
+  XLSX.utils.book_append_sheet(wb, wsDispatches, 'NhatKy_CapPhat');
+
+  // SHEET 4: SỔ NHẬP KHO & NGUỒN TÀI TRỢ
+  const importHeaders = [
+    'STT',
+    'Mã phiếu nhập',
+    'Ngày nhập',
+    'Loại sản phẩm',
+    'Hình thức đóng gói',
+    'Quy đổi tổng số miếng',
+    'Nguồn cung cấp / Đơn vị tài trợ',
+    'Người tiếp nhận',
+    'Ghi chú',
+    'Trạng thái',
+  ];
+
+  const importRows = reportData.imports.map((i, idx) => [
+    idx + 1,
+    i.importCode,
+    formatDateVN(i.importDate),
+    i.productName,
+    i.packagingType === 'pack' ? `${i.packCount} gói x ${i.piecesPerPack} miếng/gói` : 'Miếng rời',
+    i.totalPieces,
+    i.sourceOrSponsor,
+    i.receiverName,
+    i.notes || '',
+    i.status === 'completed' ? 'Hoàn tất' : `Đã hủy (${i.cancelReason || ''})`,
+  ]);
+
+  const wsImports = createReportSheet(
+    'SỔ NHẬP KHO & TIẾP NHẬN TÀI TRỢ BĂNG VỆ SINH HỌC ĐƯỜNG',
+    `Kỳ: ${reportData.periodLabel} • Tổng nhập: ${reportData.totalImportedPieces} miếng`,
+    importHeaders,
+    importRows,
+    ['TỔNG CỘNG', `${reportData.imports.length} phiếu nhập`, '', '', '', reportData.totalImportedPieces]
+  );
+  XLSX.utils.book_append_sheet(wb, wsImports, 'NhatKy_NhapKho');
+
+  saveWorkbook(wb, `Bao_Cao_Cap_Phat_BVS_Nu_Sinh_${getFilenameDate()}.xlsx`);
+}
+
 
 

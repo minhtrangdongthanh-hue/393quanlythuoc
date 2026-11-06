@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Settings,
   Database,
@@ -14,6 +14,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { db } from '../services/db';
+import { templateConfigService } from '../services/templateConfigService';
 import { ReportSignerConfigModal } from './ReportSignerConfigModal';
 
 export const BackupAndSettings: React.FC = () => {
@@ -22,12 +23,59 @@ export const BackupAndSettings: React.FC = () => {
   const [restoreConfirmData, setRestoreConfirmData] = useState<string | null>(null);
   const [showSignerModal, setShowSignerModal] = useState(false);
 
-  // Settings state
-  const [schoolName, setSchoolName] = useState('TRƯỜNG THCS ĐÔNG THẠNH');
-  const [schoolYear, setSchoolYear] = useState('2026-2027');
-  const [medicName, setMedicName] = useState('Y sĩ Trần Thị Bích Thảo');
-  const [expiryWarningDays, setExpiryWarningDays] = useState(90);
+  // Settings state - Tự động tải từ templateConfigService & db.getSettings()
+  const [schoolName, setSchoolName] = useState(() => {
+    return templateConfigService.getConfig().schoolName || db.getSettings().schoolName || 'TRƯỜNG THCS ĐÔNG THẠNH';
+  });
+  const [schoolYear, setSchoolYear] = useState(() => {
+    return templateConfigService.getConfig().academicYear || '2026 - 2027';
+  });
+  const [medicName, setMedicName] = useState(() => {
+    return templateConfigService.getConfig().signatory1Name || db.getSettings().nurseInCharge || 'Cô Đoàn Thị Minh Trang';
+  });
+  const [principalName, setPrincipalName] = useState(() => {
+    return templateConfigService.getConfig().signatory2Name || 'Ban Giám Hiệu';
+  });
+  const [expiryWarningDays, setExpiryWarningDays] = useState(() => {
+    return db.getSettings().warningExpiringDays || 90;
+  });
   const [privacyMode, setPrivacyMode] = useState<boolean>(() => db.isPrivacyModeEnabled());
+
+  // Lắng nghe cập nhật cấu hình biểu mẫu từ bất kỳ nơi nào trong ứng dụng
+  useEffect(() => {
+    const handleConfigChange = () => {
+      const cfg = templateConfigService.getConfig();
+      setSchoolName(cfg.schoolName);
+      setSchoolYear(cfg.academicYear);
+      setMedicName(cfg.signatory1Name);
+      setPrincipalName(cfg.signatory2Name);
+    };
+    window.addEventListener('templateConfigChanged', handleConfigChange);
+    return () => window.removeEventListener('templateConfigChanged', handleConfigChange);
+  }, []);
+
+  // Lưu cấu hình và người ký báo cáo
+  const handleSaveSettings = () => {
+    // 1. Cập nhật vào DB Settings
+    db.updateSettings({
+      schoolName: schoolName.trim(),
+      nurseInCharge: medicName.trim(),
+      warningExpiringDays: expiryWarningDays,
+    });
+
+    // 2. Cập nhật vào Template Config cho in ấn A4 và xuất báo cáo
+    const currentTpl = templateConfigService.getConfig();
+    templateConfigService.saveConfig({
+      ...currentTpl,
+      schoolName: schoolName.trim(),
+      academicYear: schoolYear.trim(),
+      signatory1Name: medicName.trim(),
+      signatory2Name: principalName.trim(),
+    });
+
+    setSuccessMessage('Đã lưu cấu hình hệ thống & thông tin người ký báo cáo thành công!');
+    setTimeout(() => setSuccessMessage(null), 3500);
+  };
 
   // Export JSON Backup
   const handleExportBackup = () => {
@@ -209,15 +257,36 @@ export const BackupAndSettings: React.FC = () => {
               </div>
             </div>
 
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">Cán bộ y tế phụ trách</label>
-              <input
-                type="text"
-                value={medicName}
-                onChange={(e) => setMedicName(e.target.value)}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2"
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Cán bộ y tế phụ trách (Ký báo cáo) <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={medicName}
+                  onChange={(e) => setMedicName(e.target.value)}
+                  placeholder="VD: Cô Đoàn Thị Minh Trang"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Hiệu trưởng / Ban Giám Hiệu (Ký duyệt) <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={principalName}
+                  onChange={(e) => setPrincipalName(e.target.value)}
+                  placeholder="VD: Ban Giám Hiệu"
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
             </div>
+            <p className="text-[11px] text-slate-500">
+              * Họ tên người ký ở trên sẽ tự động được in trên tất cả các biểu mẫu A4, sổ theo dõi y tế và báo cáo xuất nhập kho.
+            </p>
 
             {/* Chế độ Bảo Mật & Ẩn Tên Học Sinh */}
             <div className="p-3.5 bg-amber-50/80 border border-amber-200/90 rounded-xl space-y-2">
@@ -251,13 +320,11 @@ export const BackupAndSettings: React.FC = () => {
             <div className="flex flex-wrap items-center gap-2 pt-2">
               <button
                 type="button"
-                onClick={() => {
-                  setSuccessMessage('Đã lưu cấu hình hệ thống!');
-                  setTimeout(() => setSuccessMessage(null), 3000);
-                }}
-                className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-semibold shadow-xs cursor-pointer"
+                onClick={handleSaveSettings}
+                className="px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer transition-colors flex items-center gap-1.5"
               >
-                Lưu cấu hình
+                <Check className="w-4 h-4" />
+                <span>Lưu cấu hình & Người ký</span>
               </button>
 
               <button

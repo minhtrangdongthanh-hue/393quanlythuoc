@@ -33,6 +33,7 @@ import {
   TemplateConfig,
   DEFAULT_TEMPLATE_CONFIG,
 } from '../services/templateConfigService';
+import { ClinicVisit } from '../types';
 
 type TemplateKey =
   | 'mau1_so_phong_y_te'
@@ -58,8 +59,79 @@ export const PrintA4Templates: React.FC = () => {
   const [isDirectEdit, setIsDirectEdit] = useState(false);
   const [showResetModal, setShowResetModal] = useState(false);
 
+  // Quản lý chữ ký / Ký nhận tự điền từng dòng và hàng loạt cho Mẫu 1
+  const [customSignatures, setCustomSignatures] = useState<Record<string, string>>(() => {
+    try {
+      const saved = localStorage.getItem('thcs_dt_custom_signatures_v1');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+  const [bulkSignatureText, setBulkSignatureText] = useState('');
+
   // Lấy dữ liệu thực tế từ database
   const visits = db.getClinicVisits();
+
+  const getSignatureValue = (v: ClinicVisit): string => {
+    if (customSignatures[v.id] !== undefined) {
+      return customSignatures[v.id];
+    }
+    if (v.signatureNote !== undefined && v.signatureNote !== '') {
+      return v.signatureNote;
+    }
+    return '';
+  };
+
+  const handleSignatureChange = (visitId: string, val: string) => {
+    setCustomSignatures((prev) => {
+      const next = { ...prev, [visitId]: val };
+      try {
+        localStorage.setItem('thcs_dt_custom_signatures_v1', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+    try {
+      db.updateClinicVisit(visitId, { signatureNote: val });
+    } catch {}
+  };
+
+  const handleApplyBulkSignature = (text: string) => {
+    const updated: Record<string, string> = {};
+    for (const v of visits) {
+      updated[v.id] = text;
+      try {
+        db.updateClinicVisit(v.id, { signatureNote: text });
+      } catch {}
+    }
+    setCustomSignatures(updated);
+    try {
+      localStorage.setItem('thcs_dt_custom_signatures_v1', JSON.stringify(updated));
+    } catch {}
+    setPrintNotification(
+      text
+        ? `Đã áp dụng nội dung ký "${text}" cho toàn bộ ${visits.length} lượt khám!`
+        : 'Đã để trống toàn bộ ô ký nhận để ký tay bằng bút mực!'
+    );
+    setTimeout(() => setPrintNotification(null), 3000);
+  };
+
+  const handleFillPerformerNames = () => {
+    const updated: Record<string, string> = {};
+    for (const v of visits) {
+      const name = v.performer || 'Nhân viên Y tế';
+      updated[v.id] = name;
+      try {
+        db.updateClinicVisit(v.id, { signatureNote: name });
+      } catch {}
+    }
+    setCustomSignatures(updated);
+    try {
+      localStorage.setItem('thcs_dt_custom_signatures_v1', JSON.stringify(updated));
+    } catch {}
+    setPrintNotification('Đã điền họ tên Cán bộ y tế vào cột Ký nhận cho toàn bộ lượt khám!');
+    setTimeout(() => setPrintNotification(null), 3000);
+  };
   const students = db.getStudents();
   const specialStudents = students.filter(
     (s) => s.specialAttention || (s.allergies && s.allergies !== 'Không') || s.chronicConditions
@@ -232,7 +304,7 @@ export const PrintA4Templates: React.FC = () => {
               : ''
           }</td>
               <td>${v.outcome || 'Đã ổn định'}</td>
-              <td style="text-align: center; font-style: italic;">${(v.performer || 'Y sĩ').split(' ').pop()}</td>
+              <td style="text-align: center; font-style: italic;">${getSignatureValue(v)}</td>
             </tr>
           `;
         })
@@ -801,6 +873,62 @@ export const PrintA4Templates: React.FC = () => {
         </button>
       </div>
 
+      {/* Signature Quick Control Bar for Mẫu 1 */}
+      {activeTemplate === 'mau1_so_phong_y_te' && (
+        <div className="bg-amber-50/90 border border-amber-300/80 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs text-amber-950 shadow-2xs">
+          <div className="flex items-center gap-2">
+            <span className="font-bold flex items-center gap-1.5 text-amber-900 text-xs">
+              ✍️ Cột Ký nhận:
+            </span>
+            <span className="text-slate-600 text-[11px] hidden sm:inline">
+              Tự gõ trực tiếp vào từng ô trên bảng bên dưới, hoặc chọn nhanh:
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => handleApplyBulkSignature('')}
+              className="px-2.5 py-1 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 font-semibold text-slate-700 text-[11px] cursor-pointer shadow-2xs transition-colors"
+              title="Xóa trắng toàn bộ ô ký nhận để in ra giấy ký tay bằng bút mực"
+            >
+              Để trống ký tay
+            </button>
+            <button
+              type="button"
+              onClick={handleFillPerformerNames}
+              className="px-2.5 py-1 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 font-semibold text-slate-700 text-[11px] cursor-pointer shadow-2xs transition-colors"
+              title="Điền đầy đủ họ tên Cán bộ y tế thực hiện vào cột ký nhận"
+            >
+              Điền tên CB Y tế
+            </button>
+
+            <div className="flex items-center gap-1 bg-white border border-slate-300 rounded-lg p-0.5 shadow-2xs">
+              <input
+                type="text"
+                value={bulkSignatureText}
+                onChange={(e) => setBulkSignatureText(e.target.value)}
+                placeholder="Gõ nội dung ký chung..."
+                className="px-2 py-0.5 text-xs w-36 focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  if (bulkSignatureText.trim()) {
+                    handleApplyBulkSignature(bulkSignatureText.trim());
+                  }
+                }}
+                disabled={!bulkSignatureText.trim()}
+                className="px-2 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded text-[11px] font-bold cursor-pointer disabled:opacity-50 transition-colors"
+                title="Áp dụng nội dung này cho toàn bộ cột ký nhận"
+              >
+                Áp dụng tất cả
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Printable Sheet View - Styled like Real A4 Paper */}
       <div
         className={`bg-white p-8 sm:p-12 rounded-2xl border border-slate-300 shadow-md mx-auto text-slate-900 printable-sheet transition-all ${
@@ -912,8 +1040,15 @@ export const PrintA4Templates: React.FC = () => {
                       )}
                     </td>
                     <td className="border border-slate-900 p-1.5">{v.outcome}</td>
-                    <td className="border border-slate-900 p-1.5 text-center italic">
-                      {(v.performer || 'Y sĩ').split(' ').pop() || ''}
+                    <td className="border border-slate-900 p-0.5 text-center italic">
+                      <input
+                        type="text"
+                        value={getSignatureValue(v)}
+                        onChange={(e) => handleSignatureChange(v.id, e.target.value)}
+                        placeholder="Ký tay..."
+                        className="w-full text-center italic font-semibold text-slate-800 bg-transparent hover:bg-blue-50/70 focus:bg-white focus:ring-1 focus:ring-blue-500 rounded px-1 py-1 border border-transparent hover:border-slate-300 focus:border-blue-400 text-xs transition-all placeholder:text-slate-300 placeholder:not-italic"
+                        title="Nhấp để tự điền / chỉnh sửa nội dung ký nhận cho lượt này"
+                      />
                     </td>
                   </tr>
                 );
@@ -1320,7 +1455,7 @@ export const PrintA4Templates: React.FC = () => {
                       value={config.signatory1Name}
                       onChange={(e) => setConfig({ ...config, signatory1Name: e.target.value })}
                       className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg font-bold"
-                      placeholder="Họ và tên (Y sĩ Trần Thị Bích Thảo)"
+                      placeholder="Họ và tên (Cô Đoàn Thị Minh Trang)"
                     />
                   </div>
                   <div className="space-y-2">

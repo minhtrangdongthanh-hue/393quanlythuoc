@@ -60,7 +60,7 @@ export const DEFAULT_TEMPLATE_CONFIG: TemplateConfig = {
   
   signatory1Title: 'CÁN BỘ Y TẾ TRƯỜNG HỌC',
   signatory1Sub: '(Ký và ghi rõ họ tên)',
-  signatory1Name: 'Y sĩ Trần Thị Bích Thảo',
+  signatory1Name: 'Cô Đoàn Thị Minh Trang',
 
   signatory2Title: 'HIỆU TRƯỞNG PHÊ DUYỆT',
   signatory2Sub: '(Ký, đóng dấu)',
@@ -88,15 +88,36 @@ export const templateConfigService = {
   getConfig(): TemplateConfig {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
+      const customMedic = localStorage.getItem('thcs_dt_medic_name_v1');
+      const customPrincipal = localStorage.getItem('thcs_dt_principal_name_v1');
+
       if (saved) {
         const parsed = JSON.parse(saved);
+        let sig1Name = parsed.signatory1Name;
+        // Tự động thay thế nếu đang dính tên mẫu cũ hoặc rỗng
+        if (!sig1Name || sig1Name.trim() === 'Y sĩ Trần Thị Bích Thảo') {
+          sig1Name = customMedic || 'Cô Đoàn Thị Minh Trang';
+        }
+        let sig2Name = parsed.signatory2Name;
+        if (!sig2Name) {
+          sig2Name = customPrincipal || 'Ban Giám Hiệu';
+        }
+
         return {
           ...DEFAULT_TEMPLATE_CONFIG,
           ...parsed,
+          signatory1Name: sig1Name,
+          signatory2Name: sig2Name,
           customTitles: {
             ...DEFAULT_TEMPLATE_CONFIG.customTitles,
             ...(parsed.customTitles || {}),
           },
+        };
+      } else if (customMedic || customPrincipal) {
+        return {
+          ...DEFAULT_TEMPLATE_CONFIG,
+          signatory1Name: customMedic || DEFAULT_TEMPLATE_CONFIG.signatory1Name,
+          signatory2Name: customPrincipal || DEFAULT_TEMPLATE_CONFIG.signatory2Name,
         };
       }
     } catch (e) {
@@ -108,6 +129,16 @@ export const templateConfigService = {
   saveConfig(config: TemplateConfig) {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+      if (config.signatory1Name && config.signatory1Name.trim()) {
+        localStorage.setItem('thcs_dt_medic_name_v1', config.signatory1Name.trim());
+      }
+      if (config.signatory2Name && config.signatory2Name.trim()) {
+        localStorage.setItem('thcs_dt_principal_name_v1', config.signatory2Name.trim());
+      }
+      // Phát sự kiện toàn cục để tất cả các màn hình in ấn/báo cáo đồng bộ ngay lập tức
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('templateConfigChanged', { detail: config }));
+      }
     } catch (e) {
       console.error('Lỗi lưu cấu hình biểu mẫu:', e);
     }
@@ -116,6 +147,11 @@ export const templateConfigService = {
   resetConfig(): TemplateConfig {
     try {
       localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem('thcs_dt_medic_name_v1');
+      localStorage.removeItem('thcs_dt_principal_name_v1');
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('templateConfigChanged', { detail: DEFAULT_TEMPLATE_CONFIG }));
+      }
     } catch (e) {
       console.error('Lỗi xóa cấu hình biểu mẫu:', e);
     }
