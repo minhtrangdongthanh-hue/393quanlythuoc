@@ -3287,6 +3287,10 @@ class AppDatabase {
           }
           changed = true;
         }
+        if (Array.isArray(payload.supplies) && payload.supplies.length > 0 && cloudInvTime >= localInvTime) {
+          this.supplies = payload.supplies;
+          changed = true;
+        }
         if (Array.isArray(payload.disposals) && payload.disposals.length > 0) {
           const beforeDispJson = JSON.stringify(this.disposals);
           this.disposals = this.mergeItemsById(this.disposals, payload.disposals);
@@ -4291,6 +4295,12 @@ class AppDatabase {
           }
         },
         supplies: (data: MedicalSupply[]) => {
+          const localInvTime =
+            this.lastInventoryMutationAt ||
+            Number(localStorage.getItem('thcs_dt_last_inventory_mutation_at') || 0);
+          if (Date.now() - localInvTime < 15000 || isFirestoreQuotaExhausted()) {
+            return;
+          }
           if (data) {
             this.supplies = data.length > 0 ? data : INITIAL_SUPPLIES;
             this.saveUserLocalData(userId);
@@ -6557,7 +6567,7 @@ class AppDatabase {
       { subcollection: 'transactions', docId: id, op: 'delete' },
     ];
 
-    if (revertStock && tx.items && tx.items.length > 0) {
+    if (revertStock && tx.items && tx.items.length > 0 && tx.status !== 'cancelled') {
       for (const item of tx.items) {
         if (item.batchId) {
           const batch = this.batches.find((b) => b.id === item.batchId);
@@ -6568,6 +6578,16 @@ class AppDatabase {
               batch.quantity += (item.quantity || 0);
             }
             writes.push({ subcollection: 'batches', docId: batch.id, data: batch, op: 'set' });
+          }
+        } else {
+          const sup = this.supplies.find((s) => s.id === item.medicineId || s.code === item.medicineCode);
+          if (sup) {
+            if (tx.type === 'import') {
+              sup.quantity = Math.max(0, sup.quantity - (item.quantity || 0));
+            } else if (tx.type === 'export') {
+              sup.quantity += (item.quantity || 0);
+            }
+            writes.push({ subcollection: 'supplies', docId: sup.id, data: sup, op: 'set' });
           }
         }
       }
@@ -7265,11 +7285,18 @@ class AppDatabase {
         }
       }
     } else if (tx.type === 'export') {
-      // Re-add to batch quantities
+      // Re-add to batch quantities or supply quantities
       for (const item of tx.items) {
-        const batch = this.batches.find((b) => b.id === item.batchId);
-        if (batch) {
-          batch.quantity += item.quantity;
+        if (item.batchId) {
+          const batch = this.batches.find((b) => b.id === item.batchId);
+          if (batch) {
+            batch.quantity += item.quantity;
+          }
+        } else {
+          const sup = this.supplies.find((s) => s.id === item.medicineId || s.code === item.medicineCode);
+          if (sup) {
+            sup.quantity += item.quantity;
+          }
         }
       }
       // Remove or mark usage records
@@ -7300,8 +7327,13 @@ class AppDatabase {
         { subcollection: 'transactions', docId: tx.id, data: tx, op: 'set' },
       ];
       for (const item of tx.items) {
-        const b = this.batches.find((batch) => batch.id === item.batchId);
-        if (b) writes.push({ subcollection: 'batches', docId: b.id, data: b, op: 'set' });
+        if (item.batchId) {
+          const b = this.batches.find((batch) => batch.id === item.batchId);
+          if (b) writes.push({ subcollection: 'batches', docId: b.id, data: b, op: 'set' });
+        } else {
+          const sup = this.supplies.find((s) => s.id === item.medicineId || s.code === item.medicineCode);
+          if (sup) writes.push({ subcollection: 'supplies', docId: sup.id, data: sup, op: 'set' });
+        }
       }
       for (const medId of affectedMedIds) {
         const med = this.medicines.find((m) => m.id === medId);
@@ -7331,6 +7363,198 @@ class AppDatabase {
 
   public getMedicalSupplies(): MedicalSupply[] {
     return this.getSupplies();
+  }
+
+  /**
+   * Lấy danh mục vật tư y tế hiện có trong ứng dụng cùng số lượng tồn thực tế thời gian thực:
+   * - Vật tư thuộc Kho thuốc & vật tư chính (mã VT-* trong medicines/batches)
+   * - Vật tư thuộc Danh mục vật tư sơ cứu (trong supplies)
+   */
+  public getConsumableSupplyCatalog(): Array<{
+    id: string;
+    code: string;
+    name: string;
+    unit: string;
+    currentStock: number;
+    source: 'warehouse' | 'supplies';
+    groupLabel: string;
+  }> {
+    const warehouseSupplies = this.getMedicines()
+      .filter((m) => m.code && m.code.toUpperCase().startsWith('VT-'))
+      .map((m) => {
+        const validStock = this.batches
+          .filter((b) => b.medicineId === m.id && b.quantity > 0 && getDaysRemaining(b.expDate) >= 0)
+          .reduce((sum, b) => sum + (b.quantity || 0), 0);
+        return {
+          id: m.id,
+          code: m.code,
+          name: m.name,
+          unit: m.unit,
+          currentStock: validStock,
+          source: 'warehouse' as const,
+          groupLabel: 'Kho thuốc & Vật tư y tế chính',
+        };
+      });
+
+    const firstAidSupplies = this.getSupplies().map((s) => ({
+      id: s.id,
+      code: s.code,
+      name: s.name,
+      unit: s.unit,
+      currentStock: Math.max(0, Number(s.quantity) || 0),
+      source: 'supplies' as const,
+      groupLabel: 'Danh mục vật tư sơ cứu',
+    }));
+
+    return [...warehouseSupplies, ...firstAidSupplies];
+  }
+
+  /**
+   * Ghi nhận phiếu tiêu hao vật tư y tế và trừ kho đồng bộ:
+   * - Kiểm tra lại tồn kho thực tế ngay tại thời điểm lưu
+   * - Không cho phép số lượng <= 0, không nguyên, hoặc > tồn thực tế
+   * - Đồng bộ tất cả màn hình, báo cáo và lưu trữ (LocalStorage, IndexedDB, Server, Firestore)
+   */
+  public recordSupplyConsumption(payload: {
+    date: string;
+    itemId: string;
+    quantity: number;
+  }): InventoryTransaction {
+    const useDate = (payload.date || '').trim();
+    if (!useDate) {
+      throw new Error('Vui lòng chọn ngày sử dụng.');
+    }
+    const itemId = (payload.itemId || '').trim();
+    if (!itemId) {
+      throw new Error('Vui lòng chọn vật tư từ danh mục hiện có.');
+    }
+    const qty = Number(payload.quantity);
+    if (!Number.isFinite(qty) || !Number.isInteger(qty) || qty <= 0) {
+      throw new Error('Số lượng tiêu hao phải là số nguyên lớn hơn 0.');
+    }
+
+    // 1. Check if item is in main warehouse (medicines + batches)
+    const med = this.medicines.find((m) => m.id === itemId);
+    if (med) {
+      // Re-calculate exact real-time stock from batches before saving
+      this.syncMedicine(med.id);
+      const fefo = this.calculateFEFOAllocation(med.id, qty);
+      const currentValidStock = fefo.totalValidAvailable;
+      if (currentValidStock <= 0) {
+        throw new Error(`Vật tư "${med.name}" hiện đã hết tồn kho khả dụng (Tồn hiện tại: 0 ${med.unit}).`);
+      }
+      if (qty > currentValidStock) {
+        throw new Error(
+          `Số lượng tiêu hao (${qty} ${med.unit}) vượt quá số lượng tồn kho thực tế (${currentValidStock} ${med.unit}).`
+        );
+      }
+
+      return this.exportMedicineTransaction({
+        date: useDate,
+        recipientName: 'Phòng Y Tế (Tiêu hao vật tư)',
+        recipientType: 'other',
+        recipientClass: 'Phòng Y tế',
+        purpose: 'Tiêu hao vật tư y tế',
+        performer: this.currentUser?.fullName || 'Nhân viên Y tế',
+        items: [
+          {
+            medicineId: med.id,
+            quantity: qty,
+          },
+        ],
+      });
+    }
+
+    // 2. Check if item is in supplies catalog (this.supplies)
+    const sup = this.supplies.find((s) => s.id === itemId);
+    if (!sup) {
+      throw new Error('Không tìm thấy vật tư đã chọn trong danh mục hiện có.');
+    }
+
+    const currentSupplyStock = Math.max(0, Number(sup.quantity) || 0);
+    if (currentSupplyStock <= 0) {
+      throw new Error(`Vật tư "${sup.name}" hiện đã hết tồn kho (Tồn hiện tại: 0 ${sup.unit}).`);
+    }
+    if (qty > currentSupplyStock) {
+      throw new Error(
+        `Số lượng tiêu hao (${qty} ${sup.unit}) vượt quá số lượng tồn kho thực tế (${currentSupplyStock} ${sup.unit}).`
+      );
+    }
+
+    // Deduct exact quantity at save time
+    sup.quantity = currentSupplyStock - qty;
+
+    const txCode = this.getNextExportCode();
+    const performerName = this.currentUser?.fullName || 'Nhân viên Y tế';
+    const newTx: InventoryTransaction = {
+      id: 'tx-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+      transactionCode: txCode,
+      type: 'export',
+      date: useDate,
+      recipientName: 'Phòng Y Tế (Tiêu hao vật tư)',
+      recipientType: 'other',
+      recipientClass: 'Phòng Y tế',
+      purpose: 'Tiêu hao vật tư y tế',
+      performer: performerName,
+      items: [
+        {
+          medicineId: sup.id,
+          medicineCode: sup.code,
+          medicineName: sup.name,
+          batchId: '',
+          batchNumber: 'KHO-VT',
+          quantity: qty,
+          unitPrice: 0,
+          totalAmount: 0,
+          unit: sup.unit,
+        },
+      ],
+      totalAmount: 0,
+      status: 'completed',
+      isDemo: false,
+      createdAt: new Date().toISOString(),
+    };
+
+    this.transactions.unshift(newTx);
+
+    const record: UsageRecord = {
+      id: 'rec-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+      transactionId: newTx.id,
+      date: newTx.date,
+      recipientName: newTx.recipientName || 'Phòng Y Tế (Tiêu hao vật tư)',
+      recipientType: 'other',
+      recipientClass: 'Phòng Y tế',
+      medicineId: sup.id,
+      medicineName: sup.name,
+      batchNumber: 'KHO-VT',
+      quantity: qty,
+      unit: sup.unit,
+      purpose: 'Tiêu hao vật tư y tế',
+      performer: performerName,
+      isDemo: false,
+    };
+    this.usageRecords.unshift(record);
+
+    this.logAudit(
+      'Nhập tiêu hao vật tư y tế',
+      `Tạo phiếu tiêu hao ${newTx.transactionCode}: ${sup.name} (${qty} ${sup.unit}) - Tồn còn lại: ${sup.quantity} ${sup.unit}`,
+      newTx.id
+    );
+
+    this.markInventoryMutation();
+    this.saveAll();
+    this.notify();
+
+    if (this.currentUserId) {
+      const writes: BatchWriteOp[] = [
+        { subcollection: 'supplies', docId: sup.id, data: sup, op: 'set' },
+        { subcollection: 'transactions', docId: newTx.id, data: newTx, op: 'set' },
+        { subcollection: 'usageRecords', docId: record.id, data: record, op: 'set' },
+      ];
+      this.persistBatch(writes);
+    }
+
+    return newTx;
   }
 
   public addSupply(supplyData: Omit<MedicalSupply, 'id'>): MedicalSupply {
@@ -8014,6 +8238,11 @@ class AppDatabase {
     let todaySuppliesUsedCount = 0;
     for (const v of todayVisits) {
       todaySuppliesUsedCount += (v.suppliesUsed || []).reduce((sum, item) => sum + item.quantity, 0);
+    }
+    for (const t of this.transactions) {
+      if (t.type === 'export' && t.status !== 'cancelled' && t.date === todayStr && t.purpose === 'Tiêu hao vật tư y tế') {
+        todaySuppliesUsedCount += (t.items || []).reduce((sum, item) => sum + (item.quantity || 0), 0);
+      }
     }
 
     // Top reasons this month
@@ -10933,6 +11162,26 @@ class AppDatabase {
           };
         }
         supMap[s.supplyName].quantity += s.quantity;
+      }
+    }
+
+    for (const t of this.transactions) {
+      if (
+        t.type === 'export' &&
+        t.status !== 'cancelled' &&
+        t.date.startsWith(monthStr) &&
+        t.purpose === 'Tiêu hao vật tư y tế'
+      ) {
+        for (const item of t.items || []) {
+          if (!supMap[item.medicineName]) {
+            supMap[item.medicineName] = {
+              supplyName: item.medicineName,
+              quantity: 0,
+              unit: item.unit,
+            };
+          }
+          supMap[item.medicineName].quantity += item.quantity;
+        }
       }
     }
 

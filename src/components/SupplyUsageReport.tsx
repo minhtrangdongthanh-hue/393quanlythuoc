@@ -1,20 +1,19 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   BriefcaseMedical,
   Search,
-  Download,
   Printer,
-  Calendar,
-  Layers,
-  Sparkles,
   FileSpreadsheet,
   CheckCircle2,
+  AlertCircle,
+  PlusCircle,
+  RotateCcw,
 } from 'lucide-react';
-import { db, formatDateTimeVN, formatDateVN, formatTime24H } from '../services/db';
+import { db, formatDateTimeVN, formatDateVN, formatTime24H, getCurrentDateISO } from '../services/db';
 import { exportSupplyUsageExcel, getFilenameDate } from '../services/excelService';
 
 export const SupplyUsageReport: React.FC = () => {
-  const [, setDbTick] = useState(0);
+  const [dbTick, setDbTick] = useState(0);
   useEffect(() => {
     const unsub = db.subscribe(() => setDbTick((t) => t + 1));
     return () => unsub();
@@ -23,18 +22,107 @@ export const SupplyUsageReport: React.FC = () => {
   const visits = db.getClinicVisits();
   const supplies = db.getSupplies();
   const classes = db.getSchoolClasses();
+  const exportTransactions = db.getTransactions('export');
+  const consumableCatalog = useMemo(() => db.getConsumableSupplyCatalog(), [dbTick]);
+
+  // State cho phần "Nhập tiêu hao vật tư y tế"
+  const [consumptionDate, setConsumptionDate] = useState<string>(() => getCurrentDateISO());
+  const [consumptionItemId, setConsumptionItemId] = useState<string>('');
+  const [consumptionQtyInput, setConsumptionQtyInput] = useState<string>('');
+  const [consumptionError, setConsumptionError] = useState<string | null>(null);
+  const [consumptionSuccess, setConsumptionSuccess] = useState<string | null>(null);
+  const [isSubmittingConsumption, setIsSubmittingConsumption] = useState<boolean>(false);
+  const submitLockRef = useRef<boolean>(false);
+
+  const selectedCatalogItem = useMemo(
+    () => consumableCatalog.find((item) => item.id === consumptionItemId) || null,
+    [consumableCatalog, consumptionItemId]
+  );
+
+  const handleCancelConsumption = () => {
+    setConsumptionDate(getCurrentDateISO());
+    setConsumptionItemId('');
+    setConsumptionQtyInput('');
+    setConsumptionError(null);
+  };
+
+  const handleSaveConsumption = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (submitLockRef.current || isSubmittingConsumption) return;
+
+    setConsumptionError(null);
+    setConsumptionSuccess(null);
+
+    if (!consumptionDate.trim()) {
+      setConsumptionError('Vui lòng chọn ngày sử dụng.');
+      return;
+    }
+    if (!consumptionItemId) {
+      setConsumptionError('Vui lòng chọn vật tư từ danh mục hiện có.');
+      return;
+    }
+    const rawQty = consumptionQtyInput.trim();
+    if (!rawQty) {
+      setConsumptionError('Vui lòng nhập số lượng tiêu hao.');
+      return;
+    }
+    const parsedQty = Number(rawQty);
+    if (!Number.isFinite(parsedQty) || !Number.isInteger(parsedQty) || parsedQty <= 0) {
+      setConsumptionError('Số lượng tiêu hao phải là số nguyên lớn hơn 0.');
+      return;
+    }
+
+    // Kiểm tra lại tồn kho thực tế ngay tại thời điểm lưu
+    const freshCatalog = db.getConsumableSupplyCatalog();
+    const freshItem = freshCatalog.find((it) => it.id === consumptionItemId);
+    if (!freshItem) {
+      setConsumptionError('Không tìm thấy vật tư đã chọn trong danh mục hiện có.');
+      return;
+    }
+    if (parsedQty > freshItem.currentStock) {
+      setConsumptionError(
+        `Số lượng tiêu hao (${parsedQty} ${freshItem.unit}) vượt quá số lượng tồn thực tế hiện tại (${freshItem.currentStock} ${freshItem.unit}).`
+      );
+      return;
+    }
+
+    submitLockRef.current = true;
+    setIsSubmittingConsumption(true);
+    try {
+      const tx = db.recordSupplyConsumption({
+        date: consumptionDate.trim(),
+        itemId: consumptionItemId,
+        quantity: parsedQty,
+      });
+      const updatedCatalog = db.getConsumableSupplyCatalog();
+      const updatedItem = updatedCatalog.find((it) => it.id === consumptionItemId);
+      const remainingStock = updatedItem ? updatedItem.currentStock : freshItem.currentStock - parsedQty;
+
+      setConsumptionQtyInput('');
+      setConsumptionSuccess(
+        `Đã lưu phiếu tiêu hao ${tx.transactionCode}: trừ ${parsedQty} ${freshItem.unit} "${freshItem.name}". Tồn kho còn lại: ${remainingStock} ${freshItem.unit}.`
+      );
+      setTimeout(() => setConsumptionSuccess(null), 6000);
+    } catch (err: any) {
+      setConsumptionError(err?.message || 'Không thể lưu phiếu tiêu hao vật tư.');
+    } finally {
+      submitLockRef.current = false;
+      setIsSubmittingConsumption(false);
+    }
+  };
 
   // Filters
   const [selectedSupplyId, setSelectedSupplyId] = useState<string>('all');
   const [selectedClass, setSelectedClass] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Flatten supply usage items
+  // Flatten supply usage items (từ ca khám sơ cứu + phiếu xuất/tiêu hao vật tư y tế trong kho)
   const supplyItems = useMemo(() => {
     const list: Array<{
       visitId: string;
       visitCode: string;
       dateTime: string;
+      rawSortTime: number;
       studentName: string;
       studentCode: string;
       className: string;
@@ -46,18 +134,26 @@ export const SupplyUsageReport: React.FC = () => {
       performer: string;
     }> = [];
 
+    const supplyIdSet = new Set(consumableCatalog.map((c) => c.id));
+    const supplyCodeSet = new Set(consumableCatalog.map((c) => c.code));
+
     visits.forEach((v) => {
       if (!v.suppliesUsed || v.suppliesUsed.length === 0) return;
       const vDate = v.dateTime
         ? formatDateTimeVN(v.dateTime)
-        : (v.visitDate ? `${v.timeIn ? formatTime24H(v.timeIn) + ' ' : ''}${formatDateVN(v.visitDate)}` : '—');
-      const vReason = (v.reasons && v.reasons.length > 0 ? v.reasons.join(', ') : v.customReason) || v.reason || '';
+        : v.visitDate
+          ? `${v.timeIn ? formatTime24H(v.timeIn) + ' ' : ''}${formatDateVN(v.visitDate)}`
+          : '—';
+      const sortTime = new Date(v.createdAt || v.dateTime || v.visitDate || 0).getTime() || 0;
+      const vReason =
+        (v.reasons && v.reasons.length > 0 ? v.reasons.join(', ') : v.customReason) || v.reason || '';
 
       v.suppliesUsed.forEach((s) => {
         list.push({
           visitId: v.id,
           visitCode: v.visitCode,
           dateTime: vDate,
+          rawSortTime: sortTime,
           studentName: v.studentName,
           studentCode: v.studentCode,
           className: v.className,
@@ -71,8 +167,38 @@ export const SupplyUsageReport: React.FC = () => {
       });
     });
 
-    return list.sort((a, b) => new Date(b.dateTime).getTime() - new Date(a.dateTime).getTime());
-  }, [visits]);
+    exportTransactions.forEach((tx) => {
+      if (tx.status === 'cancelled') return;
+      const isConsumptionSlip = tx.purpose === 'Tiêu hao vật tư y tế';
+      for (const item of tx.items || []) {
+        const isSupplyItem =
+          isConsumptionSlip ||
+          supplyIdSet.has(item.medicineId) ||
+          (item.medicineCode &&
+            (item.medicineCode.toUpperCase().startsWith('VT-') || supplyCodeSet.has(item.medicineCode)));
+        if (!isSupplyItem) continue;
+
+        const sortTime = new Date(tx.createdAt || tx.date || 0).getTime() || 0;
+        list.push({
+          visitId: tx.id,
+          visitCode: tx.transactionCode,
+          dateTime: tx.date,
+          rawSortTime: sortTime,
+          studentName: tx.recipientName || 'Phòng Y Tế',
+          studentCode: tx.recipientType === 'student' ? 'HS' : 'YT',
+          className: tx.recipientClass || 'Phòng Y tế',
+          supplyId: item.medicineId,
+          supplyName: item.medicineName,
+          quantity: item.quantity,
+          unit: item.unit,
+          reason: tx.purpose || 'Tiêu hao vật tư y tế',
+          performer: tx.performer,
+        });
+      }
+    });
+
+    return list.sort((a, b) => b.rawSortTime - a.rawSortTime);
+  }, [visits, exportTransactions, consumableCatalog]);
 
   // Filtered items
   const filteredItems = useMemo(() => {
@@ -113,7 +239,9 @@ export const SupplyUsageReport: React.FC = () => {
     try {
       let filterText = `Toàn bộ ${filteredItems.length} lượt sử dụng vật tư`;
       if (selectedSupplyId !== 'all') {
-        const sup = supplies.find((s) => s.id === selectedSupplyId);
+        const sup =
+          consumableCatalog.find((s) => s.id === selectedSupplyId) ||
+          supplies.find((s) => s.id === selectedSupplyId);
         filterText = `Vật tư: ${sup?.name || selectedSupplyId}`;
       }
       if (selectedClass !== 'all') {
@@ -131,6 +259,15 @@ export const SupplyUsageReport: React.FC = () => {
       setTimeout(() => setExportNotification(null), 5000);
     }
   };
+
+  const warehouseCatalogItems = useMemo(
+    () => consumableCatalog.filter((c) => c.source === 'warehouse'),
+    [consumableCatalog]
+  );
+  const firstAidCatalogItems = useMemo(
+    () => consumableCatalog.filter((c) => c.source === 'supplies'),
+    [consumableCatalog]
+  );
 
   return (
     <div className="space-y-6">
@@ -169,6 +306,158 @@ export const SupplyUsageReport: React.FC = () => {
         </div>
       </div>
 
+      {/* Phần Nhập tiêu hao vật tư y tế */}
+      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-2">
+            <PlusCircle className="w-4 h-4 text-blue-700" />
+            <h2 className="text-sm font-bold text-slate-900">Nhập tiêu hao vật tư y tế</h2>
+          </div>
+          {selectedCatalogItem && (
+            <div className="text-xs font-semibold text-slate-700 bg-blue-50 border border-blue-200 px-3 py-1 rounded-lg">
+              Số lượng tồn hiện tại:{' '}
+              <span className="font-bold text-blue-800">
+                {selectedCatalogItem.currentStock} {selectedCatalogItem.unit}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {consumptionError && (
+          <div className="p-3 bg-red-50 border border-red-200 text-red-800 rounded-xl text-xs flex items-center gap-2 font-medium">
+            <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+            <span>{consumptionError}</span>
+          </div>
+        )}
+
+        {consumptionSuccess && (
+          <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl text-xs flex items-center gap-2 font-medium">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{consumptionSuccess}</span>
+          </div>
+        )}
+
+        <form onSubmit={handleSaveConsumption} className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+          {/* Ngày sử dụng */}
+          <div className="sm:col-span-3">
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Ngày sử dụng <span className="text-red-500">*</span>
+            </label>
+            <input
+              id="input-supply-consumption-date"
+              type="date"
+              value={consumptionDate}
+              onChange={(e) => {
+                setConsumptionDate(e.target.value);
+                setConsumptionError(null);
+              }}
+              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-blue-600"
+              required
+            />
+          </div>
+
+          {/* Chọn vật tư từ danh mục hiện có */}
+          <div className="sm:col-span-4">
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Vật tư y tế <span className="text-red-500">*</span>
+            </label>
+            <select
+              id="select-supply-consumption-item"
+              value={consumptionItemId}
+              onChange={(e) => {
+                setConsumptionItemId(e.target.value);
+                setConsumptionError(null);
+              }}
+              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-blue-600"
+              required
+            >
+              <option value="">-- Chọn vật tư từ danh mục hiện có --</option>
+              {warehouseCatalogItems.length > 0 && (
+                <optgroup label="Kho thuốc & Vật tư y tế chính">
+                  {warehouseCatalogItems.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      [{item.code}] {item.name} (Tồn: {item.currentStock} {item.unit})
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {firstAidCatalogItems.length > 0 && (
+                <optgroup label="Danh mục vật tư sơ cứu">
+                  {firstAidCatalogItems.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      [{item.code}] {item.name} (Tồn: {item.currentStock} {item.unit})
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+            </select>
+          </div>
+
+          {/* Đơn vị tính (lấy theo vật tư) & Số lượng tồn hiện tại */}
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Đơn vị tính / Tồn hiện tại
+            </label>
+            <input
+              id="input-supply-consumption-unit"
+              type="text"
+              readOnly
+              value={
+                selectedCatalogItem
+                  ? `${selectedCatalogItem.unit} (Tồn: ${selectedCatalogItem.currentStock})`
+                  : '—'
+              }
+              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 text-slate-700 font-semibold cursor-not-allowed"
+            />
+          </div>
+
+          {/* Số lượng tiêu hao */}
+          <div className="sm:col-span-3">
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Số lượng tiêu hao <span className="text-red-500">*</span>
+            </label>
+            <input
+              id="input-supply-consumption-qty"
+              type="number"
+              min={1}
+              max={selectedCatalogItem ? Math.max(1, selectedCatalogItem.currentStock) : undefined}
+              step={1}
+              placeholder="Nhập số lượng..."
+              value={consumptionQtyInput}
+              onChange={(e) => {
+                setConsumptionQtyInput(e.target.value);
+                setConsumptionError(null);
+              }}
+              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-blue-600"
+              required
+            />
+          </div>
+
+          {/* Nút Lưu / Hủy */}
+          <div className="sm:col-span-12 flex items-center justify-end gap-2 pt-1">
+            <button
+              id="btn-cancel-supply-consumption"
+              type="button"
+              onClick={handleCancelConsumption}
+              disabled={isSubmittingConsumption}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold border border-slate-200 transition-colors cursor-pointer disabled:opacity-50"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Hủy</span>
+            </button>
+            <button
+              id="btn-save-supply-consumption"
+              type="submit"
+              disabled={isSubmittingConsumption}
+              className="flex items-center gap-1.5 px-4 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>{isSubmittingConsumption ? 'Đang lưu...' : 'Lưu phiếu tiêu hao'}</span>
+            </button>
+          </div>
+        </form>
+      </div>
+
       {/* Notification Toast */}
       {exportNotification && (
         <div className="p-3.5 bg-blue-50 border border-blue-300 text-blue-900 rounded-xl text-xs flex items-center gap-2.5 font-medium shadow-xs">
@@ -189,7 +478,7 @@ export const SupplyUsageReport: React.FC = () => {
               {sup.totalQty}{' '}
               <span className="text-xs font-normal text-slate-500">{sup.unit}</span>
             </p>
-            <p className="text-[10px] text-slate-400 mt-0.5">Sử dụng qua {sup.times} lần sơ cứu</p>
+            <p className="text-[10px] text-slate-400 mt-0.5">Sử dụng qua {sup.times} lượt</p>
           </div>
         ))}
       </div>
@@ -215,7 +504,7 @@ export const SupplyUsageReport: React.FC = () => {
               className="w-full text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white"
             >
               <option value="all">Tất cả vật tư tiêu hao</option>
-              {supplies.map((s) => (
+              {consumableCatalog.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name} ({s.unit})
                 </option>
@@ -265,13 +554,13 @@ export const SupplyUsageReport: React.FC = () => {
             <thead className="bg-slate-50 text-slate-600 border-b border-slate-200 uppercase font-bold text-[10px] tracking-wider">
               <tr>
                 <th className="py-3 px-3">Thời gian</th>
-                <th className="py-3 px-3">Học sinh</th>
-                <th className="py-3 px-3">Lớp</th>
+                <th className="py-3 px-3">Học sinh / Đơn vị</th>
+                <th className="py-3 px-3">Lớp / Bộ phận</th>
                 <th className="py-3 px-3">Tên vật tư</th>
                 <th className="py-3 px-3">Số lượng đã dùng</th>
-                <th className="py-3 px-3">Mục đích sơ cứu</th>
+                <th className="py-3 px-3">Mục đích sử dụng</th>
                 <th className="py-3 px-3">Cán bộ y tế</th>
-                <th className="py-3 px-3">Mã ca khám</th>
+                <th className="py-3 px-3">Mã phiếu / Ca khám</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -307,3 +596,4 @@ export const SupplyUsageReport: React.FC = () => {
     </div>
   );
 };
+
