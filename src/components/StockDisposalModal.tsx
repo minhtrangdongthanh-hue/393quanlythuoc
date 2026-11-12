@@ -187,6 +187,7 @@ export const StockDisposalModal: React.FC<StockDisposalModalProps> = ({ onClose,
   // Feedback notifications
   const [toast, setToast] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [deleteConfirmDisposal, setDeleteConfirmDisposal] = useState<MedicineDisposal | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   const showToast = (type: 'success' | 'error', text: string) => {
     setToast({ type, text });
@@ -313,14 +314,18 @@ export const StockDisposalModal: React.FC<StockDisposalModalProps> = ({ onClose,
     setActiveTab('create_disposal');
   };
 
-  // Save disposal draft or pending approval
-  const handleSaveDisposal = (executeNow = false) => {
+  // Save disposal draft, pending approval, or execute immediately
+  const handleSaveDisposal = (mode: 'draft' | 'pending_approval' | 'execute_now' = 'draft') => {
+    if (isSubmitting) return;
     if (formItems.length === 0) {
       showToast('error', 'Biên bản chưa có danh mục thuốc cần tiêu hủy.');
       return;
     }
 
+    setIsSubmitting(true);
     try {
+      const targetStatus: DisposalStatus =
+        mode === 'execute_now' ? 'approved' : mode === 'pending_approval' ? 'pending_approval' : 'draft';
       const saved = db.saveDisposal({
         id: editingDisposalId || undefined,
         disposalCode,
@@ -332,14 +337,16 @@ export const StockDisposalModal: React.FC<StockDisposalModalProps> = ({ onClose,
         witnessNotes,
         councilMembers,
         items: formItems,
-        status: executeNow ? 'approved' : 'pending_approval',
+        status: targetStatus,
       });
 
-      if (executeNow) {
+      if (mode === 'execute_now') {
         db.executeDisposal(saved.id, councilMembers[1]?.name || 'Cán bộ Y tế', 'Tiêu hủy và xuất trừ kho tự động.');
         showToast('success', `Đã lập và thực hiện tiêu hủy thành công! Kho đã được trừ ${saved.totalQuantity} đơn vị thuốc.`);
+      } else if (mode === 'pending_approval') {
+        showToast('success', `Đã lưu biên bản ${saved.disposalCode} ở trạng thái Chờ duyệt (chưa trừ kho).`);
       } else {
-        showToast('success', `Đã lưu biên bản tiêu hủy ${saved.disposalCode} thành công.`);
+        showToast('success', `Đã lưu bản nháp biên bản tiêu hủy ${saved.disposalCode} (chưa trừ kho).`);
       }
 
       refreshData();
@@ -347,11 +354,15 @@ export const StockDisposalModal: React.FC<StockDisposalModalProps> = ({ onClose,
       if (onSuccess) onSuccess();
     } catch (err: any) {
       showToast('error', err.message || 'Lỗi khi lưu biên bản tiêu hủy.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   // Direct execute from history
   const handleExecuteFromHistory = (disposal: MedicineDisposal) => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     try {
       if (disposal.status !== 'approved') {
         db.approveDisposal(disposal.id, councilMembers[0]?.name || 'Ban Giám Hiệu', 'Phê duyệt tiêu hủy thuốc hết hạn.');
@@ -362,6 +373,8 @@ export const StockDisposalModal: React.FC<StockDisposalModalProps> = ({ onClose,
       if (onSuccess) onSuccess();
     } catch (err: any) {
       showToast('error', err.message || 'Không thể thực hiện tiêu hủy.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -1700,28 +1713,41 @@ export const StockDisposalModal: React.FC<StockDisposalModalProps> = ({ onClose,
 
                 {/* Submit Actions */}
                 <div className="pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => handleSaveDisposal(false)}
-                      className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl border border-slate-300 transition-colors"
-                      title="Lưu biên bản dự thảo vào sổ lưu trữ, tồn kho các lô thuốc chưa thay đổi"
+                      disabled={isSubmitting}
+                      onClick={() => handleSaveDisposal('draft')}
+                      className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-800 text-xs font-bold rounded-xl border border-slate-300 transition-colors cursor-pointer"
+                      title="Lưu biên bản ở trạng thái Bản Nháp, tồn kho các lô thuốc chưa bị trừ"
                     >
-                      Lưu Bản Nháp (Tồn kho chưa đổi)
+                      Lưu Bản Nháp (Chưa trừ kho)
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleSaveDisposal(true)}
-                      className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center gap-1.5"
+                      disabled={isSubmitting}
+                      onClick={() => handleSaveDisposal('pending_approval')}
+                      className="px-4 py-2.5 bg-amber-50 hover:bg-amber-100 disabled:opacity-50 text-amber-900 text-xs font-bold rounded-xl border border-amber-300 transition-colors cursor-pointer"
+                      title="Lưu biên bản ở trạng thái Chờ Duyệt, tồn kho chỉ trừ khi bấm Xác nhận tiêu hủy"
+                    >
+                      Lưu Chờ Duyệt (Chưa trừ kho)
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isSubmitting}
+                      onClick={() => handleSaveDisposal('execute_now')}
+                      className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
                       title="Xác nhận hoàn tất tiêu hủy thuốc, ghi nhận phiếu xuất hủy và trừ kho ngay lập tức"
                     >
                       <CheckCircle2 className="w-4 h-4" />
-                      Xác Nhận Tiêu Hủy & Trừ Kho Ngay
+                      {isSubmitting ? 'Đang xử lý...' : 'Xác Nhận Tiêu Hủy & Trừ Kho Ngay'}
                     </button>
+                  </div>
 
                   <button
                     type="button"
                     onClick={() => setActiveTab('history')}
-                    className="px-4 py-2.5 text-slate-500 hover:text-slate-800 text-xs font-semibold"
+                    className="px-4 py-2.5 text-slate-500 hover:text-slate-800 text-xs font-semibold cursor-pointer"
                   >
                     Xem danh sách đã lưu
                   </button>

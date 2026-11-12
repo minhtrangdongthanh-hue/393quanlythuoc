@@ -2398,105 +2398,11 @@ export const ClinicReception: React.FC<ClinicReceptionProps> = ({
           )}
         </div>
 
-        {/* BƯỚC 9: VẬT TƯ Y TẾ SỬ DỤNG */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-            <div className="flex items-center gap-2">
-              <span className="w-6 h-6 rounded-full bg-emerald-700 text-white flex items-center justify-center text-xs font-bold">
-                7
-              </span>
-              <div>
-                <h2 className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
-                  <BriefcaseMedical className="w-4 h-4 text-blue-700" />
-                  <span>Vật Tư Y Tế Sử Dụng (Trừ tồn kho vật tư)</span>
-                </h2>
-                <p className="text-[11px] text-slate-500">Bông băng, gạc, nước muối sinh lý, cồn sát khuẩn...</p>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={handleAddSupplyRow}
-              className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-800 rounded-lg text-xs font-bold border border-blue-200 transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Thêm vật tư</span>
-            </button>
-          </div>
-
-          {suppliesToUse.length === 0 ? (
-            <p className="text-xs text-slate-400 italic py-2">Không sử dụng vật tư tiêu hao trong ca này.</p>
-          ) : (
-            <div className="space-y-3">
-              {suppliesToUse.map((item, idx) => {
-                const sup = allSupplies.find((s) => s.id === item.supplyId);
-                return (
-                  <div
-                    key={idx}
-                    className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center"
-                  >
-                    <div className="sm:col-span-8">
-                      <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">Tên vật tư</label>
-                      <select
-                        value={item.supplyId}
-                        onChange={(e) => {
-                          const newId = e.target.value;
-                          setSuppliesToUse((prev) =>
-                            prev.map((row, i) => (i === idx ? { ...row, supplyId: newId } : row))
-                          );
-                        }}
-                        className="w-full text-xs font-bold text-slate-800 border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white"
-                      >
-                        {allSupplies.map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.name} ({s.category}) - Còn tồn: {s.quantity} {s.unit}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="sm:col-span-3">
-                      <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">
-                        Số lượng ({sup?.unit || 'cái'})
-                      </label>
-                      <input
-                        type="number"
-                        min="1"
-                        max={sup ? sup.quantity : 50}
-                        value={item.quantity}
-                        onChange={(e) => {
-                          const qty = parseInt(e.target.value, 10) || 1;
-                          setSuppliesToUse((prev) =>
-                            prev.map((row, i) => (i === idx ? { ...row, quantity: qty } : row))
-                          );
-                        }}
-                        className="w-full text-xs font-bold text-center border border-slate-200 rounded-lg px-2 py-1.5 bg-white"
-                      />
-                    </div>
-
-                    <div className="sm:col-span-1 text-right">
-                      <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">&nbsp;</label>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveSupplyRow(idx)}
-                        className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg"
-                        title="Xóa vật tư này"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* BƯỚC 10: ĐÁNH GIÁ KẾT QUẢ & THÔNG BÁO PHỤ HUYNH */}
+        {/* BƯỚC 7: ĐÁNH GIÁ KẾT QUẢ & THÔNG BÁO PHỤ HUYNH */}
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
           <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
             <span className="w-6 h-6 rounded-full bg-emerald-700 text-white flex items-center justify-center text-xs font-bold">
-              8
+              7
             </span>
             <h2 className="font-bold text-slate-900 text-sm">Đánh Giá Kết Quả & Bàn Giao Học Sinh</h2>
           </div>

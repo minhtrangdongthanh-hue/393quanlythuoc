@@ -377,58 +377,58 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-      <div className="max-w-md w-full bg-white rounded-3xl shadow-xl p-6 sm:p-8 border border-slate-100">
+    <div className="min-h-screen flex items-center justify-center bg-[#F5F7FA] p-4">
+      <div className="max-w-md w-full bg-white rounded-xl shadow-xs p-6 sm:p-8 border border-[#E2E8F0]">
         {/* School Branding Header */}
         <div className="flex flex-col items-center justify-center text-center space-y-2.5 mb-5">
-          <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center shadow-inner ring-4 ring-emerald-50">
-            <Stethoscope className="w-7 h-7" />
+          <div className="w-12 h-12 bg-[#17324D] text-white rounded-xl flex items-center justify-center shadow-2xs">
+            <Stethoscope className="w-6 h-6" />
           </div>
           <div>
-            <div className="inline-block px-3 py-1 bg-emerald-50 text-emerald-800 rounded-full text-xs font-bold border border-emerald-200 mb-1">
+            <div className="inline-block px-3 py-1 bg-[#EAF5F4] text-[#147D80] rounded-lg text-[11px] font-bold border border-[#147D80]/20 mb-1.5 tracking-wide">
               TRƯỜNG THCS ĐÔNG THẠNH
             </div>
-            <h1 className="text-xl sm:text-2xl font-black text-slate-900">
+            <h1 className="text-xl sm:text-2xl font-bold text-[#17324D] tracking-tight">
               Sổ Quản Lý Y Tế Học Đường
             </h1>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-xs text-[#64748B] mt-0.5">
               Hệ thống xác thực bảo mật • Phân quyền RBAC • Quản lý kho dược FEFO
             </p>
           </div>
         </div>
 
         {/* Live Server Status Banner */}
-        <div className="mb-5 p-3 rounded-2xl bg-emerald-50/80 border border-emerald-200 flex items-center justify-between gap-2 text-xs">
-          <div className="flex items-center gap-2 text-emerald-900">
-            <Laptop className="w-4 h-4 text-emerald-600 shrink-0" />
+        <div className="mb-5 p-3 rounded-xl bg-[#EAF5F4] border border-[#147D80]/20 flex items-center justify-between gap-2 text-xs">
+          <div className="flex items-center gap-2.5 text-[#17324D]">
+            <Laptop className="w-4 h-4 text-[#147D80] shrink-0" />
             <div>
-              <p className="font-bold">Đã kết nối Máy chủ Y tế Trường học</p>
-              <p className="text-[11px] text-emerald-700">
-                Đồng bộ: <strong>{serverStats.clinicVisits}</strong> ca khám •{' '}
-                <strong>{serverStats.medicines}</strong> thuốc •{' '}
-                <strong>{serverStats.students}</strong> học sinh
+              <p className="font-bold text-[#17324D]">Đã kết nối Máy chủ Y tế Trường học</p>
+              <p className="text-[11px] text-[#64748B] tabular-nums">
+                Đồng bộ: <strong className="text-[#1E293B]">{serverStats.clinicVisits}</strong> ca khám •{' '}
+                <strong className="text-[#1E293B]">{serverStats.medicines}</strong> thuốc •{' '}
+                <strong className="text-[#1E293B]">{serverStats.students}</strong> học sinh
               </p>
             </div>
           </div>
           {syncingServer ? (
-            <RefreshCw className="w-4 h-4 text-emerald-600 animate-spin shrink-0" />
+            <RefreshCw className="w-4 h-4 text-[#147D80] animate-spin shrink-0" />
           ) : (
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <CheckCircle2 className="w-4 h-4 text-[#15803D] shrink-0" />
           )}
         </div>
 
         {/* Error Alert */}
         {error && (
-          <div className="mb-4 p-3.5 bg-rose-50 text-rose-900 rounded-xl flex items-start gap-2.5 border border-rose-200 text-xs">
-            <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600 mt-0.5" />
+          <div className="mb-4 p-3.5 bg-[#FEF2F2] text-[#B91C1C] rounded-lg flex items-start gap-2.5 border border-[#FECACA] text-xs">
+            <AlertTriangle className="w-4 h-4 shrink-0 text-[#B91C1C] mt-0.5" />
             <span className="font-semibold leading-relaxed">{error}</span>
           </div>
         )}
 
         {/* Success Alert */}
         {successMsg && (
-          <div className="mb-4 p-3.5 bg-emerald-50 text-emerald-900 rounded-xl flex items-start gap-2.5 border border-emerald-200 text-xs">
-            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 mt-0.5" />
+          <div className="mb-4 p-3.5 bg-[#F0FDF4] text-[#15803D] rounded-lg flex items-start gap-2.5 border border-[#BBF7D0] text-xs">
+            <CheckCircle2 className="w-4 h-4 shrink-0 text-[#15803D] mt-0.5" />
             <span className="font-semibold leading-relaxed">{successMsg}</span>
           </div>
         )}

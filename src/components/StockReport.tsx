@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Boxes,
   Search,
@@ -13,8 +13,10 @@ import {
   MapPin,
   Layers,
   ArrowUpDown,
+  Pill,
+  Bandage,
 } from 'lucide-react';
-import { db, formatDateVN, getDaysRemaining, getStatusText } from '../services/db';
+import { db, formatDateVN, getDaysRemaining, getStatusText, isMedicalSupplyItem } from '../services/db';
 import { Medicine, MedicineBatch } from '../types';
 
 interface StockReportProps {
@@ -26,14 +28,41 @@ export const StockReport: React.FC<StockReportProps> = ({
   onOpenImportForMed,
   onOpenExportForMed,
 }) => {
-  const medicines = db.getMedicines();
-  const batches = db.getBatches();
-  const metrics = db.getDashboardMetrics();
+  const [medicines, setMedicines] = useState(() => db.getMedicines());
+  const [batches, setBatches] = useState(() => db.getBatches());
+  const [metrics, setMetrics] = useState(() => db.getDashboardMetrics());
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  const refreshData = () => {
+    setMedicines(db.getMedicines());
+    setBatches(db.getBatches());
+    setMetrics(db.getDashboardMetrics());
+  };
+
+  useEffect(() => {
+    const unsub = db.subscribe(refreshData);
+    return () => unsub();
+  }, []);
 
   const [viewMode, setViewMode] = useState<'by_medicine' | 'by_batch'>('by_medicine');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [locationFilter, setLocationFilter] = useState('all');
+  const [categoryFilter, setCategoryFilter] = useState<'all' | 'medicine' | 'supply'>('all');
+
+  const handleSetCategory = (med: Medicine, targetCat: 'medicine' | 'supply') => {
+    const currentCat: 'medicine' | 'supply' =
+      med.itemCategory || (isMedicalSupplyItem(med) ? 'supply' : 'medicine');
+    if (currentCat === targetCat) return;
+    db.setMedicineCategory(med.id, targetCat);
+    refreshData();
+    setToastMsg(
+      `✓ Đã chuyển "${med.name}" sang nhóm ${
+        targetCat === 'supply' ? 'Vật tư y tế (Phần 2)' : 'Thuốc (Phần 1)'
+      }`
+    );
+    setTimeout(() => setToastMsg(null), 3500);
+  };
 
   // Unique locations for filter
   const locations = useMemo(() => {
@@ -47,6 +76,10 @@ export const StockReport: React.FC<StockReportProps> = ({
   // Filtered Medicines
   const filteredMedicines = useMemo(() => {
     return medicines.filter((med) => {
+      const isSupply = isMedicalSupplyItem(med);
+      if (categoryFilter === 'medicine' && isSupply) return false;
+      if (categoryFilter === 'supply' && !isSupply) return false;
+
       if (locationFilter !== 'all' && med.storageLocation !== locationFilter) return false;
 
       if (statusFilter !== 'all') {
@@ -70,7 +103,7 @@ export const StockReport: React.FC<StockReportProps> = ({
         matchBatch
       );
     });
-  }, [medicines, batches, locationFilter, statusFilter, searchTerm]);
+  }, [medicines, batches, categoryFilter, locationFilter, statusFilter, searchTerm]);
 
   // Filtered Batches (Quản lý lô riêng biệt)
   const filteredBatches = useMemo(() => {
@@ -78,6 +111,10 @@ export const StockReport: React.FC<StockReportProps> = ({
       .filter((b) => {
         const med = medicines.find((m) => m.id === b.medicineId);
         if (!med) return false;
+
+        const isSupply = isMedicalSupplyItem(med);
+        if (categoryFilter === 'medicine' && isSupply) return false;
+        if (categoryFilter === 'supply' && !isSupply) return false;
 
         if (locationFilter !== 'all' && med.storageLocation !== locationFilter) return false;
 
@@ -99,7 +136,7 @@ export const StockReport: React.FC<StockReportProps> = ({
         );
       })
       .sort((a, b) => new Date(a.expDate).getTime() - new Date(b.expDate).getTime());
-  }, [batches, medicines, locationFilter, statusFilter, searchTerm]);
+  }, [batches, medicines, categoryFilter, locationFilter, statusFilter, searchTerm]);
 
   const handlePrint = () => {
     window.print();
@@ -235,11 +272,11 @@ export const StockReport: React.FC<StockReportProps> = ({
               className="w-full py-2 px-3 rounded-xl border border-slate-200 bg-white text-xs"
             >
               <option value="all">Tất cả tình trạng tồn kho</option>
-              <option value="normal">🟢 Bình thường (An toàn)</option>
-              <option value="low_stock">🟡 Sắp hết (≤ Mức tối thiểu)</option>
-              <option value="expiring_soon">🟠 Sắp hết hạn (≤ 30 ngày)</option>
-              <option value="expired">🔴 Đã hết hạn</option>
-              <option value="out_of_stock">⚪ Hết hàng (Tồn = 0)</option>
+              <option value="normal">Bình thường (An toàn)</option>
+              <option value="low_stock">Dưới mức dự trữ (≤ Mức tối thiểu)</option>
+              <option value="expiring_soon">Sắp hết hạn (≤ 30 ngày)</option>
+              <option value="expired">Đã hết hạn</option>
+              <option value="out_of_stock">Hết hàng (Tồn = 0)</option>
             </select>
           </div>
 
@@ -257,6 +294,53 @@ export const StockReport: React.FC<StockReportProps> = ({
               ))}
             </select>
           </div>
+        </div>
+
+        {/* Category Filter Tabs */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-slate-600 mr-1 text-[11px] font-bold">Phân loại nhóm:</span>
+            <button
+              type="button"
+              onClick={() => setCategoryFilter('all')}
+              className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                categoryFilter === 'all'
+                  ? 'bg-slate-800 text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              Tất cả ({medicines.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setCategoryFilter('medicine')}
+              className={`inline-flex items-center gap-1 px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                categoryFilter === 'medicine'
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'
+              }`}
+            >
+              <Pill className="w-3.5 h-3.5" />
+              <span>Thuốc ({medicines.filter((m) => !isMedicalSupplyItem(m)).length})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setCategoryFilter('supply')}
+              className={`inline-flex items-center gap-1 px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                categoryFilter === 'supply'
+                  ? 'bg-[#17324D] text-white'
+                  : 'bg-[#F5F7FA] text-[#17324D] border border-[#E2E8F0] hover:bg-slate-200/70'
+              }`}
+            >
+              <Bandage className="w-3.5 h-3.5" />
+              <span>Vật tư y tế ({medicines.filter((m) => isMedicalSupplyItem(m)).length})</span>
+            </button>
+          </div>
+          {toastMsg && (
+            <span className="text-emerald-700 font-bold text-[11px] bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg">
+              {toastMsg}
+            </span>
+          )}
         </div>
       </div>
 
@@ -291,14 +375,38 @@ export const StockReport: React.FC<StockReportProps> = ({
 
                     return (
                       <tr key={med.id} className="hover:bg-slate-50/80">
-                        {/* Name & Code */}
+                        {/* Name & Code & Category Switcher */}
                         <td className="p-3">
                           <span className="font-bold text-slate-900 block text-xs sm:text-sm">
                             {med.name}
                           </span>
-                          <span className="font-mono text-[10px] text-slate-500">
+                          <span className="font-mono text-[10px] text-slate-500 block">
                             {med.code} • {med.activeIngredient} ({med.strength})
                           </span>
+                          <div className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-100 p-0.5 text-[10px] mt-1">
+                            <button
+                              type="button"
+                              onClick={() => handleSetCategory(med, 'medicine')}
+                              className={`px-2 py-0.5 rounded-md font-bold transition-all cursor-pointer ${
+                                !isMedicalSupplyItem(med)
+                                  ? 'bg-emerald-600 text-white shadow-2xs'
+                                  : 'text-slate-500 hover:text-slate-800'
+                              }`}
+                            >
+                              Thuốc
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleSetCategory(med, 'supply')}
+                              className={`px-2 py-0.5 rounded-md font-bold transition-all cursor-pointer ${
+                                isMedicalSupplyItem(med)
+                                  ? 'bg-[#17324D] text-white shadow-2xs'
+                                  : 'text-slate-500 hover:text-slate-800'
+                              }`}
+                            >
+                              Vật tư
+                            </button>
+                          </div>
                         </td>
 
                         {/* Dosage */}
@@ -395,7 +503,7 @@ export const StockReport: React.FC<StockReportProps> = ({
         <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
           <div className="p-3.5 bg-emerald-50/70 border-b border-emerald-100 text-xs text-emerald-950 font-semibold flex items-center justify-between">
             <span>
-              📋 DANH SÁCH CHI TIẾT TỪNG LÔ RIÊNG BIỆT (XẾP THEO THỨ TỰ HẠN SỬ DỤNG GẦN NHẤT FEFO)
+              DANH SÁCH CHI TIẾT TỪNG LÔ RIÊNG BIỆT (XẾP THEO THỨ TỰ HẠN SỬ DỤNG GẦN NHẤT FEFO)
             </span>
             <span className="text-[11px] font-normal text-emerald-800">
               Tổng cộng: <strong>{filteredBatches.length}</strong> lô thuốc
@@ -457,7 +565,7 @@ export const StockReport: React.FC<StockReportProps> = ({
                                 ? 'text-rose-600'
                                 : daysLeft <= 30
                                 ? 'text-orange-600'
-                                : 'text-emerald-700'
+                                : 'text-[#15803D]'
                             }`}
                           >
                             {daysLeft < 0
@@ -477,20 +585,20 @@ export const StockReport: React.FC<StockReportProps> = ({
                         {/* Status */}
                         <td className="p-3 text-center">
                           {daysLeft < 0 ? (
-                            <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[10px] font-bold border border-rose-200">
-                              🔴 ĐÃ HẾT HẠN
+                            <span className="px-2 py-0.5 rounded bg-[#FEF2F2] text-[#B91C1C] text-[10px] font-bold border border-[#FECACA]">
+                              ĐÃ HẾT HẠN
                             </span>
                           ) : daysLeft <= 30 ? (
-                            <span className="px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 text-[10px] font-bold border border-orange-200">
-                              🟠 SẮP HẾT HẠN (Ưu tiên FEFO)
+                            <span className="px-2 py-0.5 rounded bg-[#FFFBEB] text-[#B45309] text-[10px] font-bold border border-[#FDE68A]">
+                              SẮP HẾT HẠN (FEFO)
                             </span>
                           ) : b.quantity === 0 ? (
-                            <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[10px]">
+                            <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px]">
                               Đã xuất hết
                             </span>
                           ) : (
-                            <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold border border-emerald-200">
-                              🟢 Bình thường
+                            <span className="px-2 py-0.5 rounded bg-[#F0FDF4] text-[#15803D] text-[10px] font-bold border border-[#BBF7D0]">
+                              Bình thường
                             </span>
                           )}
                         </td>

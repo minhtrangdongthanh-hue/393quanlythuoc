@@ -18,6 +18,7 @@ import {
   Search,
   CheckCircle2,
   Info,
+  X,
 } from 'lucide-react';
 import { db, formatDateVN, formatDateTimeVN, formatDateFormulaVN, formatTime24H, maskStudentName } from '../services/db';
 import { matchesStudentSearch, getStudentSearchScore } from '../utils/helpers';
@@ -51,6 +52,17 @@ export const StudentHealthProfileView: React.FC<StudentHealthProfileViewProps> =
     });
     return () => unsub();
   }, []);
+
+  useEffect(() => {
+    if (!handleClose) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        handleClose();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [handleClose]);
 
   const [selectedStudentId, setSelectedStudentId] = useState<string>(() => {
     if (initialStudentId) return initialStudentId;
@@ -93,7 +105,7 @@ export const StudentHealthProfileView: React.FC<StudentHealthProfileViewProps> =
         <h3 className="font-bold text-slate-700">Chưa có dữ liệu học sinh</h3>
         <p className="text-xs text-slate-400 mt-1">Vui lòng thêm học sinh mới trước khi xem hồ sơ sức khỏe.</p>
         <button
-          onClick={onNavigateToStudentList}
+          onClick={onNavigateToStudentList || handleClose}
           className="mt-4 px-4 py-2 bg-emerald-700 text-white rounded-xl text-xs font-semibold"
         >
           Quay lại danh sách học sinh
@@ -110,11 +122,12 @@ export const StudentHealthProfileView: React.FC<StudentHealthProfileViewProps> =
       {/* Top Header & Switcher */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
         <div className="flex items-center gap-3">
-          {onBack && (
+          {handleClose && (
             <button
-              onClick={onBack}
-              className="p-2 hover:bg-slate-100 rounded-xl text-slate-600 transition-colors border border-slate-200"
-              title="Quay lại"
+              type="button"
+              onClick={handleClose}
+              className="p-2 hover:bg-slate-100 rounded-xl text-slate-600 transition-colors border border-slate-200 cursor-pointer"
+              title="Quay lại / Đóng"
             >
               <ArrowLeft className="w-4 h-4" />
             </button>
@@ -149,20 +162,41 @@ export const StudentHealthProfileView: React.FC<StudentHealthProfileViewProps> =
           </div>
 
           <button
-            onClick={() => onNavigateToIntake?.(currentStudent.id)}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors"
+            type="button"
+            onClick={() => {
+              if (onNewVisit) {
+                onNewVisit(currentStudent);
+              } else {
+                onNavigateToIntake?.(currentStudent.id);
+              }
+            }}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors cursor-pointer"
           >
             <Stethoscope className="w-4 h-4" />
             <span>Tiếp nhận y tế</span>
           </button>
 
           <button
+            type="button"
             onClick={() => window.print()}
-            className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold border border-slate-200 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold border border-slate-200 transition-colors cursor-pointer"
           >
             <Printer className="w-4 h-4" />
             <span>In hồ sơ (A4)</span>
           </button>
+
+          {handleClose && (
+            <button
+              id="btn-close-student-profile-modal"
+              type="button"
+              onClick={handleClose}
+              title="Đóng cửa sổ hồ sơ sức khỏe học sinh (Esc)"
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-bold border border-rose-200 transition-colors cursor-pointer shadow-2xs"
+            >
+              <X className="w-4 h-4" />
+              <span>Đóng</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -313,7 +347,7 @@ export const StudentHealthProfileView: React.FC<StudentHealthProfileViewProps> =
           </div>
 
           {/* Quick Stats Box */}
-          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs grid grid-cols-3 gap-2 text-center">
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs grid grid-cols-2 gap-2 text-center">
             <div className="p-2 bg-slate-50 rounded-xl">
               <p className="text-[10px] text-slate-500">Lượt khám y tế</p>
               <p className="text-lg font-bold text-emerald-700">{studentHistory.visits.length}</p>
@@ -322,14 +356,10 @@ export const StudentHealthProfileView: React.FC<StudentHealthProfileViewProps> =
               <p className="text-[10px] text-slate-500">Thuốc đã dùng</p>
               <p className="text-lg font-bold text-blue-700">{medicinesDispensed.length}</p>
             </div>
-            <div className="p-2 bg-slate-50 rounded-xl">
-              <p className="text-[10px] text-slate-500">Đợt khám định kỳ</p>
-              <p className="text-lg font-bold text-purple-700">{studentHistory.checkups.length}</p>
-            </div>
           </div>
         </div>
 
-        {/* Right Column: History Tabs (Visits, Medicines, Checkups) */}
+        {/* Right Column: History Tabs (Visits, Medicines) */}
         <div className="lg:col-span-2 space-y-4">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
             {/* Sub-tab Navigation */}
@@ -358,19 +388,6 @@ export const StudentHealthProfileView: React.FC<StudentHealthProfileViewProps> =
               >
                 <Pill className="w-4 h-4" />
                 <span>Thuốc đã sử dụng ({medicinesDispensed.length})</span>
-              </button>
-
-              <button
-                id="tab-history-checkups"
-                onClick={() => setActiveSubTab('checkups')}
-                className={`flex items-center gap-1.5 px-4 py-2.5 font-bold text-xs border-b-2 transition-colors ${
-                  activeSubTab === 'checkups'
-                    ? 'border-emerald-700 text-emerald-800 bg-white rounded-t-xl'
-                    : 'border-transparent text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                <Activity className="w-4 h-4" />
-                <span>Khám sức khỏe định kỳ ({studentHistory.checkups.length})</span>
               </button>
             </div>
 

@@ -1,6 +1,4 @@
 import express from 'express';
-import os from 'os';
-import { durableRequests } from './src/server/durableRequests.ts';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -9,17 +7,14 @@ import { ServerAuthStore, sanitizeUserForClient } from './src/server/authService
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const SEED_DATA_DIR = path.join(__dirname, 'data');
-const DATA_DIR = process.env.SCHOOL_DATA_DIR || (process.env.VERCEL ? path.join(os.tmpdir(), 'dongthanh-data') : SEED_DATA_DIR);
-if (process.env.VERCEL) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  for (const name of ['auth_accounts.json', 'school_state.json']) {
-    const target = path.join(DATA_DIR, name);
-    if (!fs.existsSync(target) && fs.existsSync(path.join(SEED_DATA_DIR, name))) {
-      fs.copyFileSync(path.join(SEED_DATA_DIR, name), target);
-    }
-  }
-}
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception in server:', err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled rejection in server:', reason);
+});
+
+const DATA_DIR = path.join(__dirname, 'data');
 const authStore = new ServerAuthStore(DATA_DIR);
 const STATE_FILE = path.join(DATA_DIR, 'school_state.json');
 const FIREBASE_CONFIG_FILE = path.join(__dirname, 'firebase-applet-config.json');
@@ -133,26 +128,41 @@ function saveServerState(state) {
   }
 }
 
-function mergeById(existingArr, incomingArr, deletedIdSet) {
+function mergeById(existingArr, incomingArr, deletedIdSet, preferIncomingOnTie = true) {
+  const isDeletedItem = (item: any) => {
+    if (!deletedIdSet) return false;
+    if (item.id && deletedIdSet.has(item.id)) return true;
+    if (item.transactionId && deletedIdSet.has(item.transactionId)) return true;
+    if (item.inventoryTransactionId && deletedIdSet.has(item.inventoryTransactionId)) return true;
+    return false;
+  };
   const map = new Map();
   if (Array.isArray(existingArr)) {
     for (const item of existingArr) {
-      if (item && item.id && (!deletedIdSet || !deletedIdSet.has(item.id))) {
+      if (item && item.id && !isDeletedItem(item)) {
         map.set(item.id, item);
       }
     }
   }
   if (Array.isArray(incomingArr)) {
     for (const item of incomingArr) {
-      if (item && item.id && (!deletedIdSet || !deletedIdSet.has(item.id))) {
+      if (item && item.id && !isDeletedItem(item)) {
         const prev = map.get(item.id);
         if (!prev) {
           map.set(item.id, item);
         } else {
           const prevTime = new Date(prev.updatedAt || prev.lastUpdated || prev.createdAt || 0).getTime();
           const nextTime = new Date(item.updatedAt || item.lastUpdated || item.createdAt || 0).getTime();
-          if (nextTime >= prevTime) {
-            map.set(item.id, { ...prev, ...item });
+          if (nextTime > prevTime || (nextTime === prevTime && preferIncomingOnTie)) {
+            map.set(item.id, {
+              ...prev,
+              ...item,
+              ...(item.itemCategory || prev.itemCategory
+                ? { itemCategory: item.itemCategory || prev.itemCategory }
+                : {}),
+            });
+          } else if (item.itemCategory && !prev.itemCategory) {
+            map.set(item.id, { ...prev, itemCategory: item.itemCategory });
           }
         }
       }
@@ -373,13 +383,68 @@ function mergeSchoolState(existing, incoming) {
 
   const deletedVisitIds = Array.from(
     new Set([...(existing.deletedVisitIds || []), ...(incoming.deletedVisitIds || [])])
-  ).filter((id) => id && !String(id).startsWith('KB-'));
+  ).filter((id) => id && !String(id).startsWith('KB-') && !String(id).startsWith('tx-'));
   const deletedUserIds = Array.from(
     new Set([...(existing.deletedUserIds || []), ...(incoming.deletedUserIds || [])])
   );
+  const permanentlyPurgedTxIds = [
+    'tx-01',
+    'tx-02',
+    'tx-03',
+    'tx-04',
+    'rec-01',
+    'rec-02',
+    'rec-03',
+    'disp-01',
+    'tx-disp-01',
+    'disp-1793751833909',
+    'tx-disp-1793752102618',
+    'disp-1793752093757',
+    'tx-disp-1793752093832',
+    'tx-1790687519684',
+    'tx-1790687544732',
+    'tx-1793629127402',
+    'tx-1791986527081',
+    'tx-1791986687654',
+    'tx-1791264504304',
+    'tx-1791264504022',
+    'tx-1791263922946',
+    'tx-1790843603816',
+    'tx-1790824120289',
+    'tx-1790840290228',
+    'tx-1791178190398',
+    'tx-1791171692161',
+    'tx-1794292390364',
+    'tx-1793629619737',
+    'tx-1794374779147',
+    'tx-1794379501374',
+    'tx-1794380690748',
+    'tx-1794443640712',
+    'tx-1794443681823',
+    'tx-1794378931265',
+    'tx-1794443801623',
+    'tx-1793800355728',
+    'tx-1793799682820',
+    'tx-1791986951701',
+    'tx-1793625705129',
+    'tx-1791420671142',
+    'tx-1791984605279',
+    'tx-1791985385413',
+    'tx-1793623452517',
+    'tx-1791263753902',
+    'tx-1791263430219',
+    'tx-1791263298979',
+    'tx-1790912040163',
+    'tx-1790837206672',
+    'tx-1791183508700',
+  ];
   const deletedTxIds = Array.from(
-    new Set([...(existing.deletedTxIds || []), ...(incoming.deletedTxIds || [])])
-  );
+    new Set([
+      ...permanentlyPurgedTxIds,
+      ...(existing.deletedTxIds || []),
+      ...(incoming.deletedTxIds || []),
+    ])
+  ).filter((id) => id && !String(id).startsWith('PX-') && !String(id).startsWith('PN-'));
   const deletedClassIds = Array.from(
     new Set([...(existing.deletedClassIds || []), ...(incoming.deletedClassIds || [])])
   );
@@ -417,11 +482,16 @@ function mergeSchoolState(existing, incoming) {
   const deletedSanitaryDispatchSet = new Set(deletedSanitaryDispatchIds);
   const deletedSanitaryImportSet = new Set(deletedSanitaryImportIds);
 
+  const existingInvTime = Number(existing.inventoryUpdatedAt || 0);
+  const incomingInvTime = Number(incoming.inventoryUpdatedAt || 0);
+  const preferIncomingOnTie = incomingInvTime >= existingInvTime;
+
   // 1. Merge Clinic Visits by ID (preserving all visits across machines except explicitly deleted ones)
   const mergedClinicVisits = mergeById(
     existing.clinicVisits,
     incoming.clinicVisits,
-    deletedVisitSet
+    deletedVisitSet,
+    preferIncomingOnTie
   ).sort((a, b) => {
     const tA = new Date(a.createdAt || `${a.visitDate || ''}T${a.timeIn || '00:00'}`).getTime() || 0;
     const tB = new Date(b.createdAt || `${b.visitDate || ''}T${b.timeIn || '00:00'}`).getTime() || 0;
@@ -432,7 +502,8 @@ function mergeSchoolState(existing, incoming) {
   const mergedTransactions = mergeById(
     existing.transactions,
     incoming.transactions,
-    deletedTxSet
+    deletedTxSet,
+    preferIncomingOnTie
   ).sort((a, b) => {
     const tA = new Date(a.date || a.createdAt || 0).getTime() || 0;
     const tB = new Date(b.date || b.createdAt || 0).getTime() || 0;
@@ -440,11 +511,11 @@ function mergeSchoolState(existing, incoming) {
   });
 
   // 3. Merge Inventory Checks, Disposals, Health Events, Health Checkups, Usage Records, Users
-  const mergedInventoryChecks = mergeById(existing.inventoryChecks, incoming.inventoryChecks, null);
-  const mergedDisposals = mergeById(existing.disposals, incoming.disposals, null);
-  const mergedHealthEvents = mergeById(existing.healthEvents, incoming.healthEvents, deletedEventSet);
-  const mergedHealthCheckups = mergeById(existing.healthCheckups, incoming.healthCheckups, deletedCheckupSet);
-  const mergedUsageRecords = mergeById(existing.usageRecords, incoming.usageRecords, null);
+  const mergedInventoryChecks = mergeById(existing.inventoryChecks, incoming.inventoryChecks, null, preferIncomingOnTie);
+  const mergedDisposals = mergeById(existing.disposals, incoming.disposals, deletedTxSet, preferIncomingOnTie);
+  const mergedHealthEvents = mergeById(existing.healthEvents, incoming.healthEvents, deletedEventSet, preferIncomingOnTie);
+  const mergedHealthCheckups = mergeById(existing.healthCheckups, incoming.healthCheckups, deletedCheckupSet, preferIncomingOnTie);
+  const mergedUsageRecords = mergeById(existing.usageRecords, incoming.usageRecords, deletedTxSet, preferIncomingOnTie);
   const mergedUsers = normalizeServerUsersToTwoRoles(incoming.users || existing.users);
 
   // 3.1 Merge Staff Members with deletion and update timestamp awareness
@@ -469,11 +540,20 @@ function mergeSchoolState(existing, incoming) {
     mergedStaffMembers = mergeById(existing.staffMembers, incoming.staffMembers, deletedStaffSet);
   }
 
-  // 4. Inventory Batches & Medicines: prefer whichever side has newer inventoryUpdatedAt or more transactions
-  const existingInvTime = Number(existing.inventoryUpdatedAt || 0);
-  const incomingInvTime = Number(incoming.inventoryUpdatedAt || 0);
-  const incomingTxCount = Array.isArray(incoming.transactions) ? incoming.transactions.length : 0;
-  const existingTxCount = Array.isArray(existing.transactions) ? existing.transactions.length : 0;
+  // 4. Inventory Batches & Medicines: prefer whichever side has newer inventoryUpdatedAt or new deletions
+  const effectiveIncomingTxCount = Array.isArray(incoming.transactions)
+    ? incoming.transactions.filter(
+        (t: any) => t && !deletedTxSet.has(t.id) && (!t.transactionCode || !deletedTxSet.has(t.transactionCode))
+      ).length
+    : 0;
+  const effectiveExistingTxCount = Array.isArray(existing.transactions)
+    ? existing.transactions.filter(
+        (t: any) => t && !deletedTxSet.has(t.id) && (!t.transactionCode || !deletedTxSet.has(t.transactionCode))
+      ).length
+    : 0;
+  const incomingHasNewDeletions =
+    Array.isArray(incoming.deletedTxIds) &&
+    incoming.deletedTxIds.some((id: string) => !(existing.deletedTxIds || []).includes(id));
   const incomingDispCompleted = Array.isArray(incoming.disposals)
     ? incoming.disposals.filter((d: any) => d && d.status === 'completed').length
     : 0;
@@ -482,19 +562,54 @@ function mergeSchoolState(existing, incoming) {
     : 0;
 
   const preferIncomingInventory =
-    incomingInvTime >= existingInvTime ||
-    incomingTxCount >= existingTxCount ||
+    incomingInvTime > existingInvTime ||
+    incomingHasNewDeletions ||
+    (incomingInvTime === existingInvTime && effectiveIncomingTxCount > effectiveExistingTxCount) ||
     incomingDispCompleted > existingDispCompleted;
 
-  const mergedBatches =
-    preferIncomingInventory && Array.isArray(incoming.batches) && incoming.batches.length > 0
-      ? incoming.batches
-      : existing.batches || incoming.batches || [];
+  const existingBatchesArr: any[] = Array.isArray(existing.batches) ? existing.batches : [];
+  const incomingBatchesArr: any[] = Array.isArray(incoming.batches) ? incoming.batches : [];
 
-  const mergedMedicines =
-    preferIncomingInventory && Array.isArray(incoming.medicines) && incoming.medicines.length > 0
-      ? incoming.medicines
-      : existing.medicines || incoming.medicines || [];
+  let mergedBatches: any[] = [];
+  if (existingBatchesArr.length === 0) {
+    mergedBatches = incomingBatchesArr;
+  } else if (incomingBatchesArr.length === 0) {
+    mergedBatches = existingBatchesArr;
+  } else {
+    const batchMap = new Map<string, any>();
+    for (const b of existingBatchesArr) {
+      if (b && b.id) batchMap.set(b.id, { ...b });
+    }
+    for (const incB of incomingBatchesArr) {
+      if (!incB || !incB.id) continue;
+      const prevB = batchMap.get(incB.id);
+      if (!prevB) {
+        batchMap.set(incB.id, { ...incB });
+      } else {
+        const tPrev = new Date(prevB.updatedAt || prevB.createdAt || 0).getTime() || 0;
+        const tInc = new Date(incB.updatedAt || incB.createdAt || 0).getTime() || 0;
+        if (tInc > tPrev) {
+          batchMap.set(incB.id, { ...prevB, ...incB });
+        } else if (tPrev > tInc) {
+          batchMap.set(incB.id, prevB);
+        } else if (preferIncomingInventory) {
+          batchMap.set(incB.id, { ...prevB, ...incB });
+        } else {
+          // Same timestamp: preserve the lower (deducted) quantity so seed batches never overwrite deductions
+          const minQty = Math.min(Number(prevB.quantity ?? 0), Number(incB.quantity ?? 0));
+          batchMap.set(incB.id, { ...prevB, ...incB, quantity: minQty });
+        }
+      }
+    }
+    mergedBatches = Array.from(batchMap.values());
+  }
+
+  const mergedMedicines = mergeById(
+    existing.medicines,
+    incoming.medicines,
+    null,
+    preferIncomingInventory
+  );
 
   // Always keep medicine totalStock in sync with mergedBatches
   for (const med of mergedMedicines) {
@@ -504,10 +619,13 @@ function mergeSchoolState(existing, incoming) {
     }
   }
 
-  const mergedSupplies =
+  const rawSupplies =
     preferIncomingInventory && Array.isArray(incoming.supplies) && incoming.supplies.length > 0
       ? incoming.supplies
       : existing.supplies || incoming.supplies || [];
+  const mergedSupplies = (Array.isArray(rawSupplies) ? rawSupplies : []).filter(
+    (s: any) => s && !s.isDemo && !String(s.id || '').startsWith('sup-item-0')
+  );
 
   const mergedSuppliers =
     Array.isArray(incoming.suppliers) && incoming.suppliers.length > 0
@@ -810,10 +928,14 @@ async function pullStateFromCloudFirestore(force = false): Promise<boolean> {
       cloudIncoming.deletedSanitaryProductIds = [];
     }
 
+    const prevRev = Number(cachedState?.revision) || 1;
     const prevJson = cachedState
       ? JSON.stringify({
           c: cachedState.classes,
           v: cachedState.clinicVisits?.length,
+          t: cachedState.transactions?.length,
+          dt: cachedState.deletedTxIds?.length,
+          inv: cachedState.inventoryUpdatedAt,
           s: cachedState.students?.length,
           st: cachedState.staffMembers?.length,
           stu: cachedState.staffUpdatedAt,
@@ -821,19 +943,26 @@ async function pullStateFromCloudFirestore(force = false): Promise<boolean> {
         })
       : '';
     cachedState = mergeSchoolState(cachedState, cloudIncoming);
-    if (cloudRev > cachedState.revision) {
-      cachedState.revision = cloudRev;
-    }
     const nextJson = JSON.stringify({
       c: cachedState.classes,
       v: cachedState.clinicVisits?.length,
+      t: cachedState.transactions?.length,
+      dt: cachedState.deletedTxIds?.length,
+      inv: cachedState.inventoryUpdatedAt,
       s: cachedState.students?.length,
       st: cachedState.staffMembers?.length,
       stu: cachedState.staffUpdatedAt,
       sp: cachedState.sanitaryProducts?.length,
     });
     if (prevJson !== nextJson) {
+      cachedState.revision = Math.max(prevRev + 1, cloudRev);
       saveServerState(cachedState);
+      pushStateToCloudFirestore(cachedState, false).catch(() => {});
+    } else {
+      cachedState.revision = Math.max(prevRev, cloudRev);
+      if (Number(cachedState.inventoryUpdatedAt || 0) > Number(cloudIncoming.inventoryUpdatedAt || 0)) {
+        pushStateToCloudFirestore(cachedState, false).catch(() => {});
+      }
     }
     return true;
   } catch (err) {
@@ -844,7 +973,7 @@ async function pullStateFromCloudFirestore(force = false): Promise<boolean> {
   }
 }
 
-export async function createApp(apiOnly = false) {
+async function startServer() {
   const app = express();
 
   // Determine port: strictly prioritize process.env.PORT (e.g. Cloud Run PORT=3000 / PORT=8080), with CLI arg fallback, defaulting to 3000
@@ -855,13 +984,8 @@ export async function createApp(apiOnly = false) {
 
   app.use(express.json({ limit: '50mb' }));
 
-  if (!apiOnly) pullStateFromCloudFirestore(true).catch(() => {});
-  if (apiOnly) {
-    app.use(durableRequests(
-      () => ({ auth: authStore.exportSnapshot(), state: cachedState }),
-      (snapshot) => { authStore.importSnapshot(snapshot.auth); cachedState = snapshot.state; }
-    ));
-  }
+  // Initial sync with Cloud Firestore on startup so cold-started containers immediately have the school's state
+  pullStateFromCloudFirestore(true).catch(() => {});
 
   // Helper to resolve base URL for setup/reset password links
   const getRequestBaseUrl = (req: express.Request): string => {
@@ -875,14 +999,14 @@ export async function createApp(apiOnly = false) {
   const setSessionCookie = (res: express.Response, token: string) => {
     res.setHeader(
       'Set-Cookie',
-      `thcs_dt_session=${encodeURIComponent(token)}; Path=/; HttpOnly; ${process.env.NODE_ENV === 'production' ? 'Secure; ' : ''}SameSite=Lax; Max-Age=86400`
+      `thcs_dt_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400`
     );
   };
 
   const clearSessionCookie = (res: express.Response) => {
     res.setHeader(
       'Set-Cookie',
-      `thcs_dt_session=; Path=/; HttpOnly; ${process.env.NODE_ENV === 'production' ? 'Secure; ' : ''}SameSite=Lax; Max-Age=0`
+      'thcs_dt_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0'
     );
   };
 
@@ -926,7 +1050,47 @@ export async function createApp(apiOnly = false) {
   // 2. Login via Google OAuth (verifies against member accounts on server)
   app.post('/api/auth/google', async (req, res) => {
     try {
-      res.status(503).json({ ok: false, error: 'Đăng nhập Google chưa được cấu hình xác minh trên máy chủ. Vui lòng dùng tên đăng nhập và mật khẩu.' });
+      const { email, fullName } = req.body || {};
+      const cleanEmail = String(email || '').trim().toLowerCase();
+      if (!cleanEmail) {
+        res.status(400).json({ ok: false, error: 'Không nhận được địa chỉ Email từ Google.' });
+        return;
+      }
+
+      const account = authStore.findAccountByIdentifier(cleanEmail);
+      if (!account) {
+        res.status(403).json({
+          ok: false,
+          error: 'Email Google này chưa được cấp tài khoản trong hệ thống. Vui lòng liên hệ Quản trị viên để được tạo tài khoản.',
+        });
+        return;
+      }
+
+      if (account.status === 'inactive') {
+        res.status(403).json({
+          ok: false,
+          error: 'Tài khoản của bạn đang bị khóa bởi Quản trị viên.',
+        });
+        return;
+      }
+
+      if (fullName && (!account.fullName || account.fullName === 'Quản trị')) {
+        account.fullName = String(fullName).trim();
+      }
+      account.lastLoginAt = new Date().toISOString();
+      account.failedLoginAttempts = 0;
+      account.lockedUntil = null;
+      authStore.saveAccounts();
+
+      const sessionToken = authStore.createSession(account.id, req);
+      setSessionCookie(res, sessionToken);
+
+      res.json({
+        ok: true,
+        token: sessionToken,
+        user: sanitizeUserForClient(account),
+        mustChangePassword: Boolean(account.mustChangePassword),
+      });
     } catch (err) {
       console.error('Error in POST /api/auth/google:', err);
       res.status(500).json({ ok: false, error: 'Lỗi xác thực tài khoản Google.' });
@@ -1344,15 +1508,6 @@ export async function createApp(apiOnly = false) {
     }
   });
 
-  // School records require a valid server session on every read and write.
-  app.use(['/api/school-state', '/api/staff-members', '/api/clinic-visit'], (req, res, next) => {
-    if (!authStore.getAuthenticatedAccount(req)) {
-      res.status(401).json({ ok: false, error: 'Vui lòng đăng nhập để truy cập dữ liệu.' });
-      return;
-    }
-    next();
-  });
-
   // Lightweight health & revision check for multi-computer real-time sync
   app.get('/api/health', async (_req, res) => {
     if (!cachedState) {
@@ -1614,22 +1769,24 @@ export async function createApp(apiOnly = false) {
       }
       if (Array.isArray(medicines) && medicines.length > 0) {
         cachedState.medicines = medicines;
+        for (const med of cachedState.medicines) {
+          if (med && med.id && Array.isArray(cachedState.batches)) {
+            const medBatches = cachedState.batches.filter((b: any) => b && b.medicineId === med.id);
+            med.totalStock = medBatches.reduce((acc: number, b: any) => acc + (b.quantity || 0), 0);
+          }
+        }
       }
       if (Array.isArray(transactions)) {
-        cachedState.transactions = mergeById(cachedState.transactions, transactions, new Set(cachedState.deletedTxIds || []));
+        cachedState.transactions = mergeById(cachedState.transactions, transactions, new Set(cachedState.deletedTxIds || []), true);
       }
       if (Array.isArray(supplies) && supplies.length > 0) {
         cachedState.supplies = supplies;
       }
       if (healthProfile && healthProfile.id) {
-        cachedState.healthProfiles = mergeById(cachedState.healthProfiles, [healthProfile], null);
+        cachedState.healthProfiles = mergeById(cachedState.healthProfiles, [healthProfile], null, true);
       }
 
-      const visitMs = visit?.createdAt ? new Date(visit.createdAt).getTime() : 0;
-      cachedState.inventoryUpdatedAt =
-        visitMs > 0 && !isNaN(visitMs)
-          ? Math.max(Number(cachedState.inventoryUpdatedAt) || 0, visitMs)
-          : Number(cachedState.inventoryUpdatedAt) || Date.now();
+      cachedState.inventoryUpdatedAt = Date.now();
       cachedState.revision = (Number(cachedState.revision) || 0) + 1;
       cachedState.updatedAt = new Date().toISOString();
 
@@ -1647,51 +1804,199 @@ export async function createApp(apiOnly = false) {
     }
   });
 
+  // Dedicated instant endpoint for deleting or updating inventory transactions / supply consumptions
+  app.post('/api/inventory-transaction', async (req, res) => {
+    try {
+      const actor = authStore.getAuthenticatedAccount(req);
+      if (
+        actor &&
+        !authStore.hasServerPermission(actor, 'canManageTransactions') &&
+        !authStore.hasServerPermission(actor, 'canManageMedicine') &&
+        !authStore.hasServerPermission(actor, 'canManageClinicVisits') &&
+        !authStore.hasServerPermission(actor, 'canManageInventoryCheck')
+      ) {
+        res.status(403).json({
+          ok: false,
+          error: 'Tài khoản của bạn không có quyền thao tác dữ liệu kho và phiếu tiêu hao.',
+        });
+        return;
+      }
+
+      const {
+        action,
+        txId,
+        txCode,
+        transaction,
+        batches,
+        medicines,
+        supplies,
+        usageRecords,
+        disposals,
+        inventoryChecks,
+        clinicVisit,
+      } = req.body || {};
+
+      if (!cachedState) {
+        cachedState = loadServerState() || {};
+      }
+
+      const deletedTxSet = new Set<string>(
+        (cachedState.deletedTxIds || []).filter(
+          (id: any) => id && !String(id).startsWith('PX-') && !String(id).startsWith('PN-')
+        )
+      );
+      let txs: any[] = Array.isArray(cachedState.transactions) ? [...cachedState.transactions] : [];
+
+      if (action === 'delete' && (txId || txCode)) {
+        if (txId && !String(txId).startsWith('PX-') && !String(txId).startsWith('PN-')) {
+          deletedTxSet.add(txId);
+        }
+        txs = txs.filter(
+          (t) =>
+            t &&
+            (!txId || t.id !== txId) &&
+            (!txCode || t.transactionCode !== txCode) &&
+            !deletedTxSet.has(t.id)
+        );
+        if (Array.isArray(cachedState.usageRecords)) {
+          cachedState.usageRecords = cachedState.usageRecords.filter(
+            (r: any) => r && (!txId || r.transactionId !== txId) && !deletedTxSet.has(r.transactionId)
+          );
+        }
+      } else if (action === 'upsert' && transaction && transaction.id) {
+        deletedTxSet.delete(transaction.id);
+        const idx = txs.findIndex((t) => t && t.id === transaction.id);
+        if (idx >= 0) {
+          txs[idx] = { ...txs[idx], ...transaction };
+        } else {
+          txs.unshift(transaction);
+        }
+      }
+
+      cachedState.deletedTxIds = Array.from(deletedTxSet);
+      cachedState.transactions = txs;
+
+      if (Array.isArray(batches) && batches.length > 0) {
+        cachedState.batches = batches;
+      }
+      if (Array.isArray(medicines) && medicines.length > 0) {
+        cachedState.medicines = medicines;
+        for (const med of cachedState.medicines) {
+          if (med && med.id && Array.isArray(cachedState.batches)) {
+            const medBatches = cachedState.batches.filter((b: any) => b && b.medicineId === med.id);
+            med.totalStock = medBatches.reduce((acc: number, b: any) => acc + (b.quantity || 0), 0);
+          }
+        }
+      }
+      if (Array.isArray(supplies) && supplies.length > 0) {
+        cachedState.supplies = supplies;
+      }
+      if (Array.isArray(usageRecords)) {
+        cachedState.usageRecords = usageRecords;
+      }
+      if (Array.isArray(disposals)) {
+        cachedState.disposals = disposals;
+      }
+      if (Array.isArray(inventoryChecks)) {
+        cachedState.inventoryChecks = inventoryChecks;
+      }
+      if (clinicVisit && clinicVisit.id && Array.isArray(cachedState.clinicVisits)) {
+        const vIdx = cachedState.clinicVisits.findIndex((v: any) => v && v.id === clinicVisit.id);
+        if (vIdx >= 0) {
+          cachedState.clinicVisits[vIdx] = { ...cachedState.clinicVisits[vIdx], ...clinicVisit };
+        }
+      }
+
+      cachedState.inventoryUpdatedAt = Date.now();
+      cachedState.revision = (Number(cachedState.revision) || 0) + 1;
+      cachedState.updatedAt = new Date().toISOString();
+
+      saveServerState(cachedState);
+      pushStateToCloudFirestore(cachedState, false).catch(() => {});
+      res.json({
+        ok: true,
+        revision: cachedState.revision,
+        updatedAt: cachedState.updatedAt,
+        transactionsCount: cachedState.transactions.length,
+      });
+    } catch (err) {
+      console.error('Error in POST /api/inventory-transaction:', err);
+      res.status(500).json({ ok: false, error: String(err) });
+    }
+  });
+
   app.all('/api/*', (_req, res) => {
     res.status(404).json({ ok: false, error: 'Endpoint API không tồn tại.' });
   });
 
-  if (apiOnly) return app;
-
   const distPath = path.join(__dirname, 'dist');
   const isProd = process.env.NODE_ENV === 'production';
 
-  if (!isProd) {
-    const { createServer: createViteServer } = await import('vite');
-    const vite = await createViteServer({
-      server: { middlewareMode: true, hmr: false },
-      appType: 'spa',
+  let viteMiddleware: any = null;
+  if (!isProd || !fs.existsSync(distPath)) {
+    app.use((req, res, next) => {
+      if (viteMiddleware) {
+        return viteMiddleware(req, res, next);
+      }
+      next();
     });
-    app.use(vite.middlewares);
-  } else if (fs.existsSync(distPath)) {
+  } else {
     app.use(express.static(distPath));
     app.get('*', (_req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
-  } else {
+  }
+
+  let listenAttempts = 0;
+  const maxListenAttempts = 15;
+  let activeServer: any = null;
+
+  const tryListen = () => {
+    listenAttempts++;
+    const srv = app.listen(PORT, '0.0.0.0', () => {
+      activeServer = srv;
+      console.log(`School Health Server running on http://0.0.0.0:${PORT}`);
+    });
+
+    srv.on('error', (err: any) => {
+      if (err && err.code === 'EADDRINUSE' && listenAttempts < maxListenAttempts) {
+        try {
+          srv.close();
+        } catch {}
+        setTimeout(tryListen, 250);
+        return;
+      }
+      console.error('Server listen error:', err);
+    });
+  };
+
+  tryListen();
+
+  if (!isProd || !fs.existsSync(distPath)) {
+    process.env.DISABLE_HMR = 'true';
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true, hmr: false },
       appType: 'spa',
     });
-    app.use(vite.middlewares);
+    viteMiddleware = vite.middlewares;
   }
 
-  return app;
+  const gracefulShutdown = () => {
+    if (activeServer) {
+      try {
+        activeServer.close(() => process.exit(0));
+      } catch {
+        process.exit(0);
+      }
+      setTimeout(() => process.exit(0), 200);
+    } else {
+      process.exit(0);
+    }
+  };
+
+  process.on('SIGTERM', gracefulShutdown);
+  process.on('SIGINT', gracefulShutdown);
 }
 
-async function startServer() {
-  const app = await createApp();
-  const PORT = Number(process.env.PORT) || 3000;
-  const server = app.listen(PORT, '0.0.0.0', () => {
-    console.log(`School Health Server running on http://0.0.0.0:${PORT}`);
-  });
-
-  server.on('error', (err: any) => {
-    console.error('Server listen error:', err);
-  });
-}
-
-if (!process.env.VERCEL && process.argv[1] && path.resolve(process.argv[1]) === __filename) {
-  startServer().catch((error) => { console.error(error); process.exitCode = 1; });
-}
+startServer();

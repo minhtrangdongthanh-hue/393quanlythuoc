@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Printer,
   FileText,
@@ -22,7 +22,7 @@ import {
   FileCode,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { db, formatDateVN, formatDateTimeVN, formatTime24H, getCurrentDateISO, maskStudentName } from '../services/db';
+import { db, formatDateVN, formatDateTimeVN, formatTime24H, getCurrentDateISO, maskStudentName, isMedicalSupplyItem } from '../services/db';
 import {
   openPrintWindow,
   downloadPrintHtml,
@@ -136,10 +136,185 @@ export const PrintA4Templates: React.FC = () => {
   const specialStudents = students.filter(
     (s) => s.specialAttention || (s.allergies && s.allergies !== 'Không') || s.chronicConditions
   );
-  const activeMonth = visits.length > 0 && visits[0].visitDate ? visits[0].visitDate.substring(0, 7) : getCurrentDateISO().substring(0, 7);
+  const defaultMonth =
+    visits.length > 0 && visits[0].visitDate
+      ? visits[0].visitDate.substring(0, 7)
+      : getCurrentDateISO().substring(0, 7);
+  const [selectedMonth, setSelectedMonth] = useState<string>('all');
+  const activeMonth = selectedMonth === 'all' ? defaultMonth : selectedMonth;
   const monthlyReport = db.getMonthlyClinicReport(activeMonth);
-  const stockRows = db.getStockInOutReport();
+  const stockRows = useMemo(() => {
+    if (selectedMonth === 'all') {
+      return db.getStockInOutReport();
+    }
+    const [y, m] = selectedMonth.split('-').map(Number);
+    const lastDay = y && m ? new Date(y, m, 0).getDate() : 31;
+    return db.getStockInOutReport({
+      startDate: `${selectedMonth}-01`,
+      endDate: `${selectedMonth}-${String(lastDay).padStart(2, '0')}`,
+    });
+  }, [selectedMonth, visits.length]);
   const healthEvents = db.getHealthEvents();
+  const exportTransactions = db.getTransactions('export');
+
+  // Danh sách gộp đầy đủ Thuốc & Vật tư y tế đã sử dụng / tiêu hao cho Mẫu 2
+  const mau2Rows = useMemo(() => {
+    const rows: Array<{
+      date: string;
+      monthKey: string;
+      sortTime: number;
+      student: string;
+      studentNameOnly: string;
+      className: string;
+      item: string;
+      quantity: number;
+      unit: string;
+      qty: string;
+      batch: string;
+      exp: string;
+      reason: string;
+      isSupply: boolean;
+    }> = [];
+
+    const visitTxIds = new Set(visits.map((v) => v.inventoryTransactionId).filter(Boolean));
+
+    for (const v of visits) {
+      const rawIsoDate = v.visitDate || (v.dateTime ? v.dateTime.split('T')[0] : '');
+      const monthKey = rawIsoDate && rawIsoDate.length >= 7 ? rawIsoDate.substring(0, 7) : '';
+      if (selectedMonth !== 'all' && monthKey !== selectedMonth) continue;
+
+      const dateDisplay = v.dateTime
+        ? formatDateTimeVN(v.dateTime)
+        : v.visitDate
+          ? `${v.timeIn ? formatTime24H(v.timeIn) + ' ' : ''}${formatDateVN(v.visitDate)}`
+          : '—';
+      const sortTime = new Date(v.createdAt || v.dateTime || v.visitDate || 0).getTime() || 0;
+      const rText = (v.reasons && v.reasons.length > 0 ? v.reasons.join(', ') : v.customReason) || v.reason || '';
+      const meds = v.medicinesUsed || v.medicinesDispensed || [];
+      for (const m of meds) {
+        const isSup = isMedicalSupplyItem({
+          medicineId: m.medicineId,
+          name: m.medicineName,
+          batchNumber: m.batchNumber,
+        });
+        rows.push({
+          date: dateDisplay,
+          monthKey,
+          sortTime,
+          student: `${v.studentName} (${v.className})`,
+          studentNameOnly: v.studentName,
+          className: v.className,
+          item: m.medicineName,
+          quantity: m.quantity,
+          unit: m.unit,
+          qty: `${m.quantity} ${m.unit}`,
+          batch: m.batchNumber || '—',
+          exp: m.expDate ? formatDateVN(m.expDate) : '—',
+          reason: rText,
+          isSupply: isSup,
+        });
+      }
+      for (const s of v.suppliesUsed || []) {
+        rows.push({
+          date: dateDisplay,
+          monthKey,
+          sortTime,
+          student: `${v.studentName} (${v.className})`,
+          studentNameOnly: v.studentName,
+          className: v.className,
+          item: s.supplyName,
+          quantity: s.quantity,
+          unit: s.unit,
+          qty: `${s.quantity} ${s.unit}`,
+          batch: 'KHO-VT',
+          exp: '—',
+          reason: rText || 'Sơ cứu y tế',
+          isSupply: true,
+        });
+      }
+    }
+
+    for (const tx of exportTransactions) {
+      if (tx.status === 'cancelled') continue;
+      if (
+        String(tx.id).startsWith('tx-disp-') ||
+        String(tx.purpose || '').includes('Xuất hủy') ||
+        String(tx.purpose || '').includes('BB-HUY')
+      ) {
+        continue;
+      }
+      if (
+        !visitTxIds.has(tx.id) &&
+        String(tx.purpose || '').includes('Cấp phát phòng y tế - Ca khám')
+      ) {
+        continue;
+      }
+      if (visitTxIds.has(tx.id) && tx.purpose !== 'Tiêu hao vật tư y tế') continue;
+      const monthKey = tx.date && tx.date.length >= 7 ? tx.date.substring(0, 7) : '';
+      if (selectedMonth !== 'all' && monthKey !== selectedMonth) continue;
+
+      const sortTime = new Date(tx.createdAt || tx.date || 0).getTime() || 0;
+      const dateDisplay = formatDateVN(tx.date);
+      const recipientDisplay = tx.recipientClass
+        ? `${tx.recipientName || 'Phòng Y Tế'} (${tx.recipientClass})`
+        : tx.recipientName || 'Phòng Y Tế (Tiêu hao vật tư)';
+      for (const it of tx.items || []) {
+        const isSup = isMedicalSupplyItem({
+          medicineId: it.medicineId,
+          code: it.medicineCode,
+          name: it.medicineName,
+          batchNumber: it.batchNumber,
+          purpose: tx.purpose,
+        });
+        rows.push({
+          date: dateDisplay,
+          monthKey,
+          sortTime,
+          student: recipientDisplay,
+          studentNameOnly: tx.recipientName || 'Phòng Y Tế (Tiêu hao vật tư)',
+          className: tx.recipientClass || 'Phòng Y tế',
+          item: it.medicineName,
+          quantity: it.quantity,
+          unit: it.unit,
+          qty: `${it.quantity} ${it.unit}`,
+          batch: it.batchNumber || 'KHO-VT',
+          exp: it.expDate ? formatDateVN(it.expDate) : '—',
+          reason: tx.purpose || 'Tiêu hao vật tư y tế',
+          isSupply: isSup,
+        });
+      }
+    }
+
+    return rows.sort((a, b) => b.sortTime - a.sortTime);
+  }, [visits, exportTransactions, selectedMonth]);
+
+  const mau2MedicineRows = useMemo(() => mau2Rows.filter((r) => !r.isSupply), [mau2Rows]);
+  const mau2SupplyRows = useMemo(() => mau2Rows.filter((r) => r.isSupply), [mau2Rows]);
+  const stockMedicineRows = useMemo(
+    () =>
+      stockRows.filter(
+        (r) =>
+          !isMedicalSupplyItem({
+            medicineId: r.medicineId,
+            code: r.medicineCode,
+            name: r.medicineName,
+            batchNumber: r.batchNumber,
+          })
+      ),
+    [stockRows]
+  );
+  const stockSupplyRows = useMemo(
+    () =>
+      stockRows.filter((r) =>
+        isMedicalSupplyItem({
+          medicineId: r.medicineId,
+          code: r.medicineCode,
+          name: r.medicineName,
+          batchNumber: r.batchNumber,
+        })
+      ),
+    [stockRows]
+  );
 
   // Cập nhật cấu hình và lưu vào localStorage
   const handleSaveConfig = (newConfig: TemplateConfig) => {
@@ -328,25 +503,11 @@ export const PrintA4Templates: React.FC = () => {
         </table>
       `;
     } else if (activeTemplate === 'mau2_thuoc_vat_tu') {
-      const rows = visits
-        .flatMap((v) => {
-          const dateDisplay = v.dateTime
-            ? formatDateTimeVN(v.dateTime)
-            : (v.visitDate ? `${v.timeIn ? formatTime24H(v.timeIn) + ' ' : ''}${formatDateVN(v.visitDate)}` : '—');
-          const rText = (v.reasons && v.reasons.length > 0 ? v.reasons.join(', ') : v.customReason) || v.reason || '';
-          const meds = v.medicinesUsed || v.medicinesDispensed || [];
-          return meds.map((m) => ({
-            date: dateDisplay,
-            student: `${v.studentName} (${v.className})`,
-            item: m.medicineName,
-            qty: `${m.quantity} ${m.unit}`,
-            batch: m.batchNumber || '—',
-            exp: m.expDate ? formatDateVN(m.expDate) : '—',
-            reason: rText,
-          }));
-        })
-        .map(
-          (row, idx) => `
+      const renderMau2SectionRows = (list: typeof mau2Rows) =>
+        list.length > 0
+          ? list
+              .map(
+                (row, idx) => `
           <tr>
             <td style="text-align: center;">${idx + 1}</td>
             <td style="white-space: nowrap;">${row.date}</td>
@@ -358,31 +519,57 @@ export const PrintA4Templates: React.FC = () => {
             <td>${row.reason}</td>
           </tr>
         `
-        )
-        .join('');
+              )
+              .join('')
+          : `<tr><td colspan="8" style="text-align: center; font-style: italic; color: #64748b;">Không có dữ liệu phát sinh trong kỳ.</td></tr>`;
 
       bodyHtml = `
+        <p style="font-weight: bold; font-size: 11pt; margin: 12px 0 6px 0; text-transform: uppercase;">PHẦN 1: DANH SÁCH THUỐC (DƯỢC PHẨM) ĐÃ XUẤT CẤP PHÁT (${mau2MedicineRows.length} lượt)</p>
         <table class="data-table">
           <thead>
             <tr>
               <th style="width: 35px;">STT</th>
               <th style="width: 95px;">Ngày cấp</th>
-              <th>Tên học sinh (Lớp)</th>
-              <th>Tên thuốc / Vật tư</th>
+              <th>Học sinh / Người nhận (Lớp)</th>
+              <th>Tên thuốc (Dược phẩm)</th>
               <th style="width: 70px;">Số lượng</th>
               <th style="width: 80px;">Số lô</th>
               <th style="width: 80px;">Hạn dùng</th>
               <th>Lý do chỉ định</th>
             </tr>
           </thead>
-          <tbody>${rows}</tbody>
+          <tbody>${renderMau2SectionRows(mau2MedicineRows)}</tbody>
+        </table>
+
+        <p style="font-weight: bold; font-size: 11pt; margin: 16px 0 6px 0; text-transform: uppercase;">PHẦN 2: DANH SÁCH VẬT TƯ Y TẾ ĐÃ XUẤT / TIÊU HAO (${mau2SupplyRows.length} lượt)</p>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th style="width: 35px;">STT</th>
+              <th style="width: 95px;">Ngày xuất / Tiêu hao</th>
+              <th>Đơn vị nhận / Học sinh</th>
+              <th>Tên vật tư y tế</th>
+              <th style="width: 70px;">Số lượng</th>
+              <th style="width: 80px;">Số lô</th>
+              <th style="width: 80px;">Hạn dùng</th>
+              <th>Mục đích sử dụng / Tiêu hao</th>
+            </tr>
+          </thead>
+          <tbody>${renderMau2SectionRows(mau2SupplyRows)}</tbody>
         </table>
       `;
     } else if (activeTemplate === 'mau3_bao_cao_thang') {
-      const medList = monthlyReport.medicinesUsedSummary
+      const medOnlyList = (monthlyReport.medicinesOnlySummary || [])
         .map(
           (m) => `
         <li><strong>${m.medicineName}</strong> (Lô ${m.batchNumber}): <strong>${m.quantity}</strong> ${m.unit}</li>
+      `
+        )
+        .join('');
+      const supOnlyList = (monthlyReport.suppliesBatchSummary || [])
+        .map(
+          (s) => `
+        <li><strong>${s.supplyName}</strong> (Lô ${s.batchNumber}): <strong>${s.quantity}</strong> ${s.unit}</li>
       `
         )
         .join('');
@@ -406,9 +593,14 @@ export const PrintA4Templates: React.FC = () => {
             <li>Số sự cố tai nạn thương tích tại trường: <strong>${monthlyReport.events.length}</strong> ca.</li>
           </ul>
 
-          <p style="margin-top: 12px;"><strong>III. THUỐC VÀ VẬT TƯ TIÊU THỤ:</strong></p>
+          <p style="margin-top: 12px;"><strong>III.1. TỔNG HỢP THUỐC (DƯỢC PHẨM) ĐÃ XUẤT CẤP PHÁT:</strong></p>
           <ul style="padding-left: 20px;">
-            ${medList || '<li>Không có thuốc cấp phát trong kỳ.</li>'}
+            ${medOnlyList || '<li>Không có thuốc cấp phát trong kỳ.</li>'}
+          </ul>
+
+          <p style="margin-top: 12px;"><strong>III.2. TỔNG HỢP VẬT TƯ Y TẾ ĐÃ XUẤT / TIÊU HAO:</strong></p>
+          <ul style="padding-left: 20px;">
+            ${supOnlyList || '<li>Không có vật tư y tế tiêu hao trong kỳ.</li>'}
           </ul>
         </div>
       `;
@@ -446,48 +638,56 @@ export const PrintA4Templates: React.FC = () => {
         </table>
       `;
     } else if (activeTemplate === 'mau5_nhap_xuat_ton') {
-      const rows = stockRows
-        .map(
-          (r, i) => `
-        <tr>
-          <td style="text-align: center;">${i + 1}</td>
-          <td style="text-align: center; font-weight: bold;">${r.medicineCode}</td>
-          <td>${r.medicineName}</td>
-          <td style="text-align: center; font-family: monospace;">${r.batchNumber}</td>
-          <td style="text-align: center;">${formatDateVN(r.expDate)}</td>
-          <td style="text-align: center;">${r.unit}</td>
-          <td style="text-align: right; font-weight: bold;">${r.openingStock}</td>
-          <td style="text-align: right; color: #047857;">${r.importQuantity > 0 ? '+' + r.importQuantity : '0'}</td>
-          <td style="text-align: right; color: #b91c1c;">${r.exportQuantity > 0 ? '-' + r.exportQuantity : '0'}</td>
-          <td style="text-align: right; font-weight: bold; background: #f8fafc;">${r.closingStock}</td>
-          <td style="font-size: 9pt;">${r.notes || 'Tủ thuốc y tế'}</td>
-        </tr>
-      `
-        )
-        .join('');
+      const renderStockSectionHtml = (list: typeof stockRows, isSupply: boolean) => {
+        const trs = list
+          .map(
+            (r, i) => `
+          <tr>
+            <td style="text-align: center;">${i + 1}</td>
+            <td style="text-align: center; font-weight: bold;">${r.medicineCode}</td>
+            <td>${r.medicineName}</td>
+            <td style="text-align: center; font-family: monospace;">${r.batchNumber}</td>
+            <td style="text-align: center;">${formatDateVN(r.expDate)}</td>
+            <td style="text-align: center;">${r.unit}</td>
+            <td style="text-align: right; font-weight: bold;">${r.openingStock}</td>
+            <td style="text-align: right; color: #047857;">${r.importQuantity > 0 ? '+' + r.importQuantity : '0'}</td>
+            <td style="text-align: right; color: #b91c1c;">${r.exportQuantity > 0 ? '-' + r.exportQuantity : '0'}</td>
+            <td style="text-align: right; font-weight: bold; background: #f8fafc;">${r.closingStock}</td>
+            <td style="font-size: 9pt;">${r.notes || 'Tủ thuốc y tế'}</td>
+          </tr>
+        `
+          )
+          .join('');
+        return `
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th rowspan="2" style="width: 30px;">STT</th>
+                <th rowspan="2" style="width: 75px;">${isSupply ? 'Mã vật tư' : 'Mã thuốc'}</th>
+                <th rowspan="2">${isSupply ? 'Tên vật tư y tế, quy cách' : 'Tên thuốc, nồng độ, hàm lượng'}</th>
+                <th rowspan="2" style="width: 70px;">Số lô</th>
+                <th rowspan="2" style="width: 70px;">Hạn dùng</th>
+                <th rowspan="2" style="width: 45px;">ĐVT</th>
+                <th rowspan="2" style="width: 55px;">Tồn đầu</th>
+                <th colspan="2">Phát sinh trong kỳ</th>
+                <th rowspan="2" style="width: 55px;">Tồn cuối</th>
+                <th rowspan="2" style="width: 80px;">Vị trí lưu trữ</th>
+              </tr>
+              <tr>
+                <th style="width: 55px;">Nhập (+)</th>
+                <th style="width: 55px;">Xuất (-)</th>
+              </tr>
+            </thead>
+            <tbody>${trs}</tbody>
+          </table>
+        `;
+      };
 
       bodyHtml = `
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th rowspan="2" style="width: 30px;">STT</th>
-              <th rowspan="2" style="width: 75px;">Mã thuốc</th>
-              <th rowspan="2">Tên thuốc, nồng độ, hàm lượng</th>
-              <th rowspan="2" style="width: 70px;">Số lô</th>
-              <th rowspan="2" style="width: 70px;">Hạn dùng</th>
-              <th rowspan="2" style="width: 45px;">ĐVT</th>
-              <th rowspan="2" style="width: 55px;">Tồn đầu</th>
-              <th colspan="2">Phát sinh trong kỳ</th>
-              <th rowspan="2" style="width: 55px;">Tồn cuối</th>
-              <th rowspan="2" style="width: 80px;">Vị trí lưu trữ</th>
-            </tr>
-            <tr>
-              <th style="width: 55px;">Nhập (+)</th>
-              <th style="width: 55px;">Xuất (-)</th>
-            </tr>
-          </thead>
-          <tbody>${rows}</tbody>
-        </table>
+        <p style="font-weight: bold; font-size: 11pt; margin: 12px 0 6px 0; text-transform: uppercase;">PHẦN 1: BẢNG NHẬP - XUẤT - TỒN THUỐC (DƯỢC PHẨM) (${stockMedicineRows.length} lô)</p>
+        ${renderStockSectionHtml(stockMedicineRows, false)}
+        <p style="font-weight: bold; font-size: 11pt; margin: 16px 0 6px 0; text-transform: uppercase;">PHẦN 2: BẢNG NHẬP - XUẤT - TỒN VẬT TƯ Y TẾ (${stockSupplyRows.length} lô)</p>
+        ${renderStockSectionHtml(stockSupplyRows, true)}
       `;
     } else if (activeTemplate === 'mau6_bien_ban_su_co') {
       const eventsList = healthEvents
@@ -590,25 +790,18 @@ export const PrintA4Templates: React.FC = () => {
           'Người thực hiện': v.performer || 'Y sĩ',
         }));
       } else if (activeTemplate === 'mau2_thuoc_vat_tu') {
-        dataRows = visits.flatMap((v, vIdx) => {
-          const dateDisplay = v.dateTime
-            ? formatDateTimeVN(v.dateTime)
-            : (v.visitDate ? `${v.timeIn ? formatTime24H(v.timeIn) + ' ' : ''}${formatDateVN(v.visitDate)}` : '—');
-          const rText = (v.reasons && v.reasons.length > 0 ? v.reasons.join(', ') : v.customReason) || v.reason || '';
-          const meds = v.medicinesUsed || v.medicinesDispensed || [];
-          return meds.map((m, mIdx) => ({
-            STT: `${vIdx + 1}.${mIdx + 1}`,
-            'Ngày cấp': dateDisplay,
-            'Tên học sinh': v.studentName,
-            Lớp: v.className,
-            'Tên thuốc / Vật tư': m.medicineName,
-            'Số lượng': m.quantity,
-            'Đơn vị tính': m.unit,
-            'Số lô': m.batchNumber || '—',
-            'Hạn dùng': m.expDate ? formatDateVN(m.expDate) : '—',
-            'Lý do chỉ định': rText,
-          }));
-        });
+        dataRows = mau2Rows.map((r, idx) => ({
+          STT: idx + 1,
+          'Ngày cấp / Tiêu hao': r.date,
+          'Người nhận / Đơn vị': r.studentNameOnly,
+          'Lớp / Bộ phận': r.className,
+          'Tên thuốc / Vật tư': r.item,
+          'Số lượng': r.quantity,
+          'Đơn vị tính': r.unit,
+          'Số lô': r.batch,
+          'Hạn dùng': r.exp,
+          'Lý do chỉ định / Mục đích': r.reason,
+        }));
       } else if (activeTemplate === 'mau3_bao_cao_thang') {
         dataRows = [
           { 'Chỉ tiêu báo cáo': 'Tổng số học sinh toàn trường', 'Giá trị': students.length, 'Đơn vị': 'học sinh' },
@@ -871,6 +1064,27 @@ export const PrintA4Templates: React.FC = () => {
         >
           Mẫu 6: Biên bản sự cố tai nạn thương tích
         </button>
+
+        <div className="flex items-center gap-2 ml-auto bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
+          <span className="text-xs font-bold text-slate-700">Kỳ / Tháng báo cáo:</span>
+          <button
+            type="button"
+            onClick={() => setSelectedMonth('all')}
+            className={`px-2 py-0.5 rounded text-xs font-bold transition-colors cursor-pointer ${
+              selectedMonth === 'all'
+                ? 'bg-emerald-700 text-white'
+                : 'bg-white text-slate-600 hover:bg-slate-200 border border-slate-200'
+            }`}
+          >
+            Tất cả
+          </button>
+          <input
+            type="month"
+            value={selectedMonth === 'all' ? activeMonth : selectedMonth}
+            onChange={(e) => setSelectedMonth(e.target.value || 'all')}
+            className="text-xs font-bold text-emerald-800 bg-white border border-slate-200 rounded px-2 py-0.5 cursor-pointer"
+          />
+        </div>
       </div>
 
       {/* Signature Quick Control Bar for Mẫu 1 */}
@@ -1059,51 +1273,91 @@ export const PrintA4Templates: React.FC = () => {
 
         {/* TEMPLATE 2: SỔ THEO DÕI THUỐC VÀ VẬT TƯ SỬ DỤNG */}
         {activeTemplate === 'mau2_thuoc_vat_tu' && (
-          <table className="w-full text-[11px] border-collapse border border-slate-900 mt-4">
-            <thead>
-              <tr className="bg-slate-100 text-center font-bold">
-                <th className="border border-slate-900 p-1.5 w-8">STT</th>
-                <th className="border border-slate-900 p-1.5 w-24">Ngày cấp</th>
-                <th className="border border-slate-900 p-1.5">Tên học sinh (Lớp)</th>
-                <th className="border border-slate-900 p-1.5">Tên thuốc / Vật tư</th>
-                <th className="border border-slate-900 p-1.5 w-16">Số lượng</th>
-                <th className="border border-slate-900 p-1.5 w-20">Số lô</th>
-                <th className="border border-slate-900 p-1.5 w-20">Hạn dùng</th>
-                <th className="border border-slate-900 p-1.5">Lý do chỉ định</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visits
-                .flatMap((v) => {
-                  const dateDisplay = v.dateTime
-                    ? formatDateTimeVN(v.dateTime)
-                    : (v.visitDate ? `${v.timeIn ? formatTime24H(v.timeIn) + ' ' : ''}${formatDateVN(v.visitDate)}` : '—');
-                  const rText = (v.reasons && v.reasons.length > 0 ? v.reasons.join(', ') : v.customReason) || v.reason || '';
-                  const meds = v.medicinesUsed || v.medicinesDispensed || [];
-                  return meds.map((m) => ({
-                    date: dateDisplay,
-                    student: `${v.studentName} (${v.className})`,
-                    item: m.medicineName,
-                    qty: `${m.quantity} ${m.unit}`,
-                    batch: m.batchNumber || '—',
-                    exp: m.expDate ? formatDateVN(m.expDate) : '—',
-                    reason: rText,
-                  }));
-                })
-                .map((row, idx) => (
-                  <tr key={idx}>
-                    <td className="border border-slate-900 p-1.5 text-center">{idx + 1}</td>
-                    <td className="border border-slate-900 p-1.5 whitespace-nowrap">{row.date}</td>
-                    <td className="border border-slate-900 p-1.5 font-bold">{row.student}</td>
-                    <td className="border border-slate-900 p-1.5 font-semibold">{row.item}</td>
-                    <td className="border border-slate-900 p-1.5 text-center font-bold">{row.qty}</td>
-                    <td className="border border-slate-900 p-1.5 text-center font-mono">{row.batch}</td>
-                    <td className="border border-slate-900 p-1.5 text-center font-mono">{row.exp}</td>
-                    <td className="border border-slate-900 p-1.5">{row.reason}</td>
+          <div className="space-y-5 mt-4">
+            <div>
+              <h3 className="font-bold text-xs uppercase text-emerald-900 mb-1.5">
+                PHẦN 1: DANH SÁCH THUỐC (DƯỢC PHẨM) ĐÃ XUẤT CẤP PHÁT ({mau2MedicineRows.length} lượt)
+              </h3>
+              <table className="w-full text-[11px] border-collapse border border-slate-900">
+                <thead>
+                  <tr className="bg-slate-100 text-center font-bold">
+                    <th className="border border-slate-900 p-1.5 w-8">STT</th>
+                    <th className="border border-slate-900 p-1.5 w-24">Ngày cấp</th>
+                    <th className="border border-slate-900 p-1.5">Học sinh / Người nhận (Lớp)</th>
+                    <th className="border border-slate-900 p-1.5">Tên thuốc (Dược phẩm)</th>
+                    <th className="border border-slate-900 p-1.5 w-16">Số lượng</th>
+                    <th className="border border-slate-900 p-1.5 w-20">Số lô</th>
+                    <th className="border border-slate-900 p-1.5 w-20">Hạn dùng</th>
+                    <th className="border border-slate-900 p-1.5">Lý do chỉ định</th>
                   </tr>
-                ))}
-            </tbody>
-          </table>
+                </thead>
+                <tbody>
+                  {mau2MedicineRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="border border-slate-900 p-3 text-center italic text-slate-400">
+                        Không có lượt cấp phát thuốc trong kỳ.
+                      </td>
+                    </tr>
+                  ) : (
+                    mau2MedicineRows.map((row, idx) => (
+                      <tr key={idx}>
+                        <td className="border border-slate-900 p-1.5 text-center">{idx + 1}</td>
+                        <td className="border border-slate-900 p-1.5 whitespace-nowrap">{row.date}</td>
+                        <td className="border border-slate-900 p-1.5 font-bold">{row.student}</td>
+                        <td className="border border-slate-900 p-1.5 font-semibold">{row.item}</td>
+                        <td className="border border-slate-900 p-1.5 text-center font-bold">{row.qty}</td>
+                        <td className="border border-slate-900 p-1.5 text-center font-mono">{row.batch}</td>
+                        <td className="border border-slate-900 p-1.5 text-center font-mono">{row.exp}</td>
+                        <td className="border border-slate-900 p-1.5">{row.reason}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div>
+              <h3 className="font-bold text-xs uppercase text-amber-900 mb-1.5">
+                PHẦN 2: DANH SÁCH VẬT TƯ Y TẾ ĐÃ XUẤT / TIÊU HAO ({mau2SupplyRows.length} lượt)
+              </h3>
+              <table className="w-full text-[11px] border-collapse border border-slate-900">
+                <thead>
+                  <tr className="bg-slate-100 text-center font-bold">
+                    <th className="border border-slate-900 p-1.5 w-8">STT</th>
+                    <th className="border border-slate-900 p-1.5 w-24">Ngày xuất / Tiêu hao</th>
+                    <th className="border border-slate-900 p-1.5">Đơn vị nhận / Học sinh</th>
+                    <th className="border border-slate-900 p-1.5">Tên vật tư y tế</th>
+                    <th className="border border-slate-900 p-1.5 w-16">Số lượng</th>
+                    <th className="border border-slate-900 p-1.5 w-20">Số lô</th>
+                    <th className="border border-slate-900 p-1.5 w-20">Hạn dùng</th>
+                    <th className="border border-slate-900 p-1.5">Mục đích sử dụng / Tiêu hao</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {mau2SupplyRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="border border-slate-900 p-3 text-center italic text-slate-400">
+                        Không có lượt xuất / tiêu hao vật tư y tế trong kỳ.
+                      </td>
+                    </tr>
+                  ) : (
+                    mau2SupplyRows.map((row, idx) => (
+                      <tr key={idx}>
+                        <td className="border border-slate-900 p-1.5 text-center">{idx + 1}</td>
+                        <td className="border border-slate-900 p-1.5 whitespace-nowrap">{row.date}</td>
+                        <td className="border border-slate-900 p-1.5 font-bold">{row.student}</td>
+                        <td className="border border-slate-900 p-1.5 font-semibold">{row.item}</td>
+                        <td className="border border-slate-900 p-1.5 text-center font-bold">{row.qty}</td>
+                        <td className="border border-slate-900 p-1.5 text-center font-mono">{row.batch}</td>
+                        <td className="border border-slate-900 p-1.5 text-center font-mono">{row.exp}</td>
+                        <td className="border border-slate-900 p-1.5">{row.reason}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         )}
 
         {/* TEMPLATE 3: BÁO CÁO THÁNG */}
@@ -1128,14 +1382,33 @@ export const PrintA4Templates: React.FC = () => {
             <p>- Số sự cố tai nạn thương tích tại trường: {monthlyReport.events.length} ca.</p>
 
             <p className="pt-2">
-              <strong>III. THUỐC VÀ VẬT TƯ TIÊU THỤ:</strong>
+              <strong>III.1. TỔNG HỢP THUỐC (DƯỢC PHẨM) ĐÃ XUẤT CẤP PHÁT:</strong>
             </p>
             <ul className="list-disc pl-5">
-              {monthlyReport.medicinesUsedSummary.map((m, i) => (
-                <li key={i}>
-                  {m.medicineName} (Lô {m.batchNumber}): <strong>{m.quantity}</strong> {m.unit}
-                </li>
-              ))}
+              {(monthlyReport.medicinesOnlySummary || []).length === 0 ? (
+                <li className="italic text-slate-500">Không có thuốc cấp phát trong kỳ.</li>
+              ) : (
+                (monthlyReport.medicinesOnlySummary || []).map((m, i) => (
+                  <li key={i}>
+                    {m.medicineName} (Lô {m.batchNumber}): <strong>{m.quantity}</strong> {m.unit}
+                  </li>
+                ))
+              )}
+            </ul>
+
+            <p className="pt-2">
+              <strong>III.2. TỔNG HỢP VẬT TƯ Y TẾ ĐÃ XUẤT / TIÊU HAO:</strong>
+            </p>
+            <ul className="list-disc pl-5">
+              {(monthlyReport.suppliesBatchSummary || []).length === 0 ? (
+                <li className="italic text-slate-500">Không có vật tư y tế tiêu hao trong kỳ.</li>
+              ) : (
+                (monthlyReport.suppliesBatchSummary || []).map((s, i) => (
+                  <li key={i}>
+                    {s.supplyName} (Lô {s.batchNumber}): <strong>{s.quantity}</strong> {s.unit}
+                  </li>
+                ))
+              )}
             </ul>
           </div>
         )}
@@ -1172,43 +1445,93 @@ export const PrintA4Templates: React.FC = () => {
 
         {/* TEMPLATE 5: SỔ NHẬP - XUẤT - TỒN KHO THUỐC */}
         {activeTemplate === 'mau5_nhap_xuat_ton' && (
-          <table className="w-full text-[11px] border-collapse border border-slate-900 mt-4">
-            <thead>
-              <tr className="bg-slate-100 text-center font-bold">
-                <th rowSpan={2} className="border border-slate-900 p-1 w-8">STT</th>
-                <th rowSpan={2} className="border border-slate-900 p-1 w-20">Mã thuốc</th>
-                <th rowSpan={2} className="border border-slate-900 p-1">Tên thuốc, nồng độ</th>
-                <th rowSpan={2} className="border border-slate-900 p-1 w-16">Số lô</th>
-                <th rowSpan={2} className="border border-slate-900 p-1 w-16">Hạn dùng</th>
-                <th rowSpan={2} className="border border-slate-900 p-1 w-10">ĐVT</th>
-                <th rowSpan={2} className="border border-slate-900 p-1 w-12">Tồn đầu</th>
-                <th colSpan={2} className="border border-slate-900 p-1">Trong kỳ</th>
-                <th rowSpan={2} className="border border-slate-900 p-1 w-12">Tồn cuối</th>
-                <th rowSpan={2} className="border border-slate-900 p-1 w-20">Vị trí</th>
-              </tr>
-              <tr className="bg-slate-100 text-center font-bold">
-                <th className="border border-slate-900 p-1 w-12 text-emerald-800">Nhập (+)</th>
-                <th className="border border-slate-900 p-1 w-12 text-rose-800">Xuất (-)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {stockRows.map((r, i) => (
-                <tr key={i}>
-                  <td className="border border-slate-900 p-1 text-center">{i + 1}</td>
-                  <td className="border border-slate-900 p-1 text-center font-mono font-bold">{r.medicineCode}</td>
-                  <td className="border border-slate-900 p-1 font-semibold">{r.medicineName}</td>
-                  <td className="border border-slate-900 p-1 text-center font-mono">{r.batchNumber}</td>
-                  <td className="border border-slate-900 p-1 text-center">{formatDateVN(r.expDate)}</td>
-                  <td className="border border-slate-900 p-1 text-center">{r.unit}</td>
-                  <td className="border border-slate-900 p-1 text-right font-bold">{r.openingStock}</td>
-                  <td className="border border-slate-900 p-1 text-right text-emerald-700 font-semibold">{r.importQuantity > 0 ? `+${r.importQuantity}` : '0'}</td>
-                  <td className="border border-slate-900 p-1 text-right text-rose-700 font-semibold">{r.exportQuantity > 0 ? `-${r.exportQuantity}` : '0'}</td>
-                  <td className="border border-slate-900 p-1 text-right font-bold bg-slate-50">{r.closingStock}</td>
-                  <td className="border border-slate-900 p-1 text-[10px]">{r.notes || 'Tủ thuốc'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="space-y-5 mt-4">
+            <div>
+              <h3 className="font-bold text-xs uppercase text-emerald-900 mb-1.5">
+                PHẦN 1: BẢNG NHẬP - XUẤT - TỒN THUỐC (DƯỢC PHẨM) ({stockMedicineRows.length} lô)
+              </h3>
+              <table className="w-full text-[11px] border-collapse border border-slate-900">
+                <thead>
+                  <tr className="bg-slate-100 text-center font-bold">
+                    <th rowSpan={2} className="border border-slate-900 p-1 w-8">STT</th>
+                    <th rowSpan={2} className="border border-slate-900 p-1 w-20">Mã thuốc</th>
+                    <th rowSpan={2} className="border border-slate-900 p-1">Tên thuốc, nồng độ</th>
+                    <th rowSpan={2} className="border border-slate-900 p-1 w-16">Số lô</th>
+                    <th rowSpan={2} className="border border-slate-900 p-1 w-16">Hạn dùng</th>
+                    <th rowSpan={2} className="border border-slate-900 p-1 w-10">ĐVT</th>
+                    <th rowSpan={2} className="border border-slate-900 p-1 w-12">Tồn đầu</th>
+                    <th colSpan={2} className="border border-slate-900 p-1">Trong kỳ</th>
+                    <th rowSpan={2} className="border border-slate-900 p-1 w-12">Tồn cuối</th>
+                    <th rowSpan={2} className="border border-slate-900 p-1 w-20">Vị trí</th>
+                  </tr>
+                  <tr className="bg-slate-100 text-center font-bold">
+                    <th className="border border-slate-900 p-1 w-12 text-emerald-800">Nhập (+)</th>
+                    <th className="border border-slate-900 p-1 w-12 text-rose-800">Xuất (-)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stockMedicineRows.map((r, i) => (
+                    <tr key={i}>
+                      <td className="border border-slate-900 p-1 text-center">{i + 1}</td>
+                      <td className="border border-slate-900 p-1 text-center font-mono font-bold">{r.medicineCode}</td>
+                      <td className="border border-slate-900 p-1 font-semibold">{r.medicineName}</td>
+                      <td className="border border-slate-900 p-1 text-center font-mono">{r.batchNumber}</td>
+                      <td className="border border-slate-900 p-1 text-center">{formatDateVN(r.expDate)}</td>
+                      <td className="border border-slate-900 p-1 text-center">{r.unit}</td>
+                      <td className="border border-slate-900 p-1 text-right font-bold">{r.openingStock}</td>
+                      <td className="border border-slate-900 p-1 text-right text-emerald-700 font-semibold">{r.importQuantity > 0 ? `+${r.importQuantity}` : '0'}</td>
+                      <td className="border border-slate-900 p-1 text-right text-rose-700 font-semibold">{r.exportQuantity > 0 ? `-${r.exportQuantity}` : '0'}</td>
+                      <td className="border border-slate-900 p-1 text-right font-bold bg-slate-50">{r.closingStock}</td>
+                      <td className="border border-slate-900 p-1 text-[10px]">{r.notes || 'Tủ thuốc'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div>
+              <h3 className="font-bold text-xs uppercase text-amber-900 mb-1.5">
+                PHẦN 2: BẢNG NHẬP - XUẤT - TỒN VẬT TƯ Y TẾ ({stockSupplyRows.length} lô)
+              </h3>
+              <table className="w-full text-[11px] border-collapse border border-slate-900">
+                <thead>
+                  <tr className="bg-slate-100 text-center font-bold">
+                    <th rowSpan={2} className="border border-slate-900 p-1 w-8">STT</th>
+                    <th rowSpan={2} className="border border-slate-900 p-1 w-20">Mã vật tư</th>
+                    <th rowSpan={2} className="border border-slate-900 p-1">Tên vật tư y tế, quy cách</th>
+                    <th rowSpan={2} className="border border-slate-900 p-1 w-16">Số lô</th>
+                    <th rowSpan={2} className="border border-slate-900 p-1 w-16">Hạn dùng</th>
+                    <th rowSpan={2} className="border border-slate-900 p-1 w-10">ĐVT</th>
+                    <th rowSpan={2} className="border border-slate-900 p-1 w-12">Tồn đầu</th>
+                    <th colSpan={2} className="border border-slate-900 p-1">Trong kỳ</th>
+                    <th rowSpan={2} className="border border-slate-900 p-1 w-12">Tồn cuối</th>
+                    <th rowSpan={2} className="border border-slate-900 p-1 w-20">Vị trí</th>
+                  </tr>
+                  <tr className="bg-slate-100 text-center font-bold">
+                    <th className="border border-slate-900 p-1 w-12 text-emerald-800">Nhập (+)</th>
+                    <th className="border border-slate-900 p-1 w-12 text-rose-800">Xuất (-)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stockSupplyRows.map((r, i) => (
+                    <tr key={i}>
+                      <td className="border border-slate-900 p-1 text-center">{i + 1}</td>
+                      <td className="border border-slate-900 p-1 text-center font-mono font-bold">{r.medicineCode}</td>
+                      <td className="border border-slate-900 p-1 font-semibold">{r.medicineName}</td>
+                      <td className="border border-slate-900 p-1 text-center font-mono">{r.batchNumber}</td>
+                      <td className="border border-slate-900 p-1 text-center">{formatDateVN(r.expDate)}</td>
+                      <td className="border border-slate-900 p-1 text-center">{r.unit}</td>
+                      <td className="border border-slate-900 p-1 text-right font-bold">{r.openingStock}</td>
+                      <td className="border border-slate-900 p-1 text-right text-emerald-700 font-semibold">{r.importQuantity > 0 ? `+${r.importQuantity}` : '0'}</td>
+                      <td className="border border-slate-900 p-1 text-right text-rose-700 font-semibold">{r.exportQuantity > 0 ? `-${r.exportQuantity}` : '0'}</td>
+                      <td className="border border-slate-900 p-1 text-right font-bold bg-slate-50">{r.closingStock}</td>
+                      <td className="border border-slate-900 p-1 text-[10px]">{r.notes || 'Tủ vật tư'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         )}
 
         {/* TEMPLATE 6: BIÊN BẢN SỰ CỐ TAI NẠN THƯƠNG TÍCH */}

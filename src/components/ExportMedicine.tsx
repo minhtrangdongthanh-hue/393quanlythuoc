@@ -325,8 +325,9 @@ export const ExportMedicine: React.FC<ExportMedicineProps> = ({
                   </span>
                 </div>
                 {currentMed && quantity > currentMed.totalStock && (
-                  <p className="text-[11px] font-bold text-rose-600 mt-1">
-                    ⚠️ Xuất vượt quá lượng tồn hiện có!
+                  <p className="text-[11px] font-bold text-[#B91C1C] mt-1 flex items-center gap-1">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                    <span>Xuất vượt quá lượng tồn hiện có!</span>
                   </p>
                 )}
               </div>

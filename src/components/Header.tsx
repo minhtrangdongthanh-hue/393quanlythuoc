@@ -197,10 +197,10 @@ export const Header: React.FC<HeaderProps> = ({
     switch (role) {
       case 'bgh':
       case 'admin':
-        return <ShieldCheck className="w-4 h-4 text-indigo-700" />;
+        return <ShieldCheck className="w-4 h-4 text-[#17324D]" />;
       case 'medic':
       default:
-        return <Stethoscope className="w-4 h-4 text-emerald-700" />;
+        return <Stethoscope className="w-4 h-4 text-[#147D80]" />;
     }
   };
 
@@ -208,41 +208,41 @@ export const Header: React.FC<HeaderProps> = ({
     switch (role) {
       case 'bgh':
       case 'admin':
-        return 'bg-indigo-100 text-indigo-900 border-indigo-300 hover:bg-indigo-200';
+        return 'bg-[#F5F7FA] text-[#17324D] border-[#E2E8F0] hover:bg-slate-100';
       case 'medic':
       default:
-        return 'bg-pink-50 text-pink-900 border-pink-200 hover:bg-pink-100';
+        return 'bg-[#EAF5F4] text-[#17324D] border-[#B2D8D6] hover:bg-[#D5EBEA]';
     }
   };
 
   return (
-    <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
+    <header className="bg-white border-b border-[#E2E8F0] sticky top-0 z-30">
       {/* Utility Top Bar - School Identity & Live Multi-Computer Sync Status */}
-      <div className="bg-slate-50 border-b border-slate-200/80 px-4 sm:px-6 py-1.5 text-xs text-slate-600 flex items-center justify-between gap-2">
+      <div className="bg-[#F5F7FA] border-b border-[#E2E8F0] px-4 sm:px-6 py-1.5 text-xs text-[#64748B] flex items-center justify-between gap-2">
         <div className="flex items-center gap-2.5 font-medium min-w-0">
-          <span className="flex items-center gap-1.5 font-bold text-blue-800 text-[11px] uppercase tracking-wider shrink-0">
-            <span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse"></span>
+          <span className="flex items-center gap-1.5 font-semibold text-[#17324D] text-[11px] uppercase tracking-wider shrink-0">
+            <span className="w-2 h-2 rounded-full bg-[#147D80]"></span>
             Hệ Thống Y Tế Học Đường
           </span>
           <span className="text-slate-300 hidden sm:inline" aria-hidden="true">|</span>
-          <span className="truncate text-[11px] text-slate-600">
+          <span className="truncate text-[11px] text-[#64748B]">
             {syncStatus === 'saving' || isManualSyncing ? (
-              <span className="text-blue-700 font-semibold inline-flex items-center gap-1">
+              <span className="text-[#147D80] font-semibold inline-flex items-center gap-1">
                 <RefreshCw className="w-3 h-3 animate-spin" /> Đang lưu & đồng bộ máy chủ...
               </span>
             ) : syncStatus === 'loading' ? (
-              <span className="text-blue-700 font-semibold inline-flex items-center gap-1">
+              <span className="text-[#147D80] font-semibold inline-flex items-center gap-1">
                 <RefreshCw className="w-3 h-3 animate-spin" /> Đang tải dữ liệu từ máy chủ...
               </span>
             ) : syncStatus === 'error' ? (
-              <span className="text-blue-700 font-semibold inline-flex items-center gap-1">
-                <CheckCircle2 className="w-3 h-3 text-orange-500" /> Đã lưu an toàn trên Máy chủ & Bộ nhớ máy ({counts.todayVisits} ca khám thực tế trong ngày • tổng {counts.visits} ca)
+              <span className="text-[#15803D] font-semibold inline-flex items-center gap-1">
+                <CheckCircle2 className="w-3 h-3 text-[#15803D]" /> Đã lưu an toàn trên Máy chủ & Bộ nhớ máy ({counts.todayVisits} ca khám thực tế trong ngày • tổng {counts.visits} ca)
               </span>
             ) : (
-              <span className="text-slate-600">
-                Đã lưu bền vững: <strong className="text-blue-800">{counts.todayVisits} ca thực tế trong ngày</strong> <span className="text-slate-500 font-medium">({counts.visits} ca toàn hệ thống)</span> •{' '}
-                <strong className="text-indigo-800">{counts.classes} lớp & GVCN</strong> •{' '}
-                <strong className="text-slate-800">
+              <span className="text-[#64748B]">
+                Đã lưu bền vững: <strong className="text-[#17324D] tabular-nums">{counts.todayVisits} ca thực tế trong ngày</strong> <span className="text-[#64748B] font-medium tabular-nums">({counts.visits} ca toàn hệ thống)</span> •{' '}
+                <strong className="text-[#17324D] tabular-nums">{counts.classes} lớp & GVCN</strong> •{' '}
+                <strong className="text-[#1E293B]">
                   {privacyMode ? 'Đã ẩn tên (Bảo mật)' : (currentUser?.fullName || currentUser?.username)}
                 </strong>
               </span>
@@ -257,14 +257,14 @@ export const Header: React.FC<HeaderProps> = ({
               const next = db.togglePrivacyMode();
               setPrivacyMode(next);
             }}
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all shadow-2xs cursor-pointer ${
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors cursor-pointer ${
               privacyMode
-                ? 'bg-amber-100 text-amber-900 border-amber-300 ring-2 ring-amber-200'
-                : 'bg-white text-slate-700 hover:text-slate-900 hover:bg-slate-50 border-slate-300'
+                ? 'bg-[#FFFBEB] text-[#B45309] border-[#FDE68A]'
+                : 'bg-white text-[#1E293B] hover:bg-[#F5F7FA] border-[#E2E8F0]'
             }`}
             title={privacyMode ? 'Đang bật chế độ ẩn tên học sinh. Bấm để hiển thị tên.' : 'Bấm để ẩn tên học sinh và bảo mật thông tin trên màn hình'}
           >
-            {privacyMode ? <EyeOff className="w-3 h-3 text-amber-700" /> : <Eye className="w-3 h-3 text-slate-500" />}
+            {privacyMode ? <EyeOff className="w-3 h-3 text-[#B45309]" /> : <Eye className="w-3 h-3 text-[#64748B]" />}
             <span>{privacyMode ? 'Đang ẩn tên HS' : 'Ẩn tên HS'}</span>
           </button>
           <button
@@ -273,7 +273,7 @@ export const Header: React.FC<HeaderProps> = ({
               handleManualSync();
               setShareModalOpen(true);
             }}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-blue-600 text-white hover:bg-blue-700 transition-all shadow-2xs cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-[#17324D] text-white hover:bg-[#0F2336] transition-colors cursor-pointer"
             title="Lấy link chuẩn để mở và sử dụng trên máy tính khác"
           >
             <Share2 className="w-3 h-3" />
@@ -284,14 +284,14 @@ export const Header: React.FC<HeaderProps> = ({
             type="button"
             onClick={handleManualSync}
             disabled={isManualSyncing}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-white text-blue-800 border border-slate-300 hover:border-blue-500 hover:bg-blue-50 transition-all shadow-2xs cursor-pointer disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-white text-[#17324D] border border-[#E2E8F0] hover:border-[#147D80] hover:bg-[#EAF5F4] transition-colors cursor-pointer disabled:opacity-50"
             title="Đồng bộ ngay dữ liệu giữa các máy tính"
           >
-            <RefreshCw className={`w-3 h-3 ${isManualSyncing ? 'animate-spin text-blue-600' : 'text-blue-700'}`} />
+            <RefreshCw className={`w-3 h-3 ${isManualSyncing ? 'animate-spin text-[#147D80]' : 'text-[#147D80]'}`} />
             <span className="hidden sm:inline">{isManualSyncing ? 'Đang đồng bộ...' : 'Đồng bộ ngay'}</span>
           </button>
 
-          <span className="hidden lg:inline-block text-slate-500 font-semibold text-[11px]">
+          <span className="hidden lg:inline-block text-[#64748B] font-semibold text-[11px]">
             {schoolName}
           </span>
         </div>
@@ -305,29 +305,29 @@ export const Header: React.FC<HeaderProps> = ({
               id="btn-toggle-sidebar"
               type="button"
               onClick={handleToggleSidebar}
-              className="p-2 rounded-xl text-slate-600 hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+              className="p-2 rounded-lg text-[#64748B] hover:bg-[#F5F7FA] hover:text-[#17324D] cursor-pointer"
               title="Ẩn / Hiện thanh điều hướng"
             >
-              <Menu className="w-6 h-6" />
+              <Menu className="w-5 h-5" />
             </button>
 
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 via-sky-600 to-indigo-600 text-white flex items-center justify-center font-bold text-lg shadow-sm ring-2 ring-blue-100">
+              <div className="w-10 h-10 rounded-lg bg-[#17324D] text-white flex items-center justify-center font-semibold text-lg shrink-0">
                 <Building2 className="w-5 h-5" />
               </div>
               <div>
-                <h1 className="text-[11px] font-bold uppercase tracking-wider text-blue-800 leading-none mb-1">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-[#64748B] leading-none mb-1">
                   {schoolName}
-                </h1>
-                <p className="text-base sm:text-lg font-black text-slate-900 leading-tight tracking-tight whitespace-nowrap">
-                  QUẢN LÝ THUỐC & Y TẾ HỌC ĐƯỜNG
                 </p>
+                <h1 className="text-base sm:text-lg font-bold text-[#17324D] leading-tight tracking-tight whitespace-nowrap">
+                  Quản Lý Thuốc & Y Tế Học Đường
+                </h1>
               </div>
             </div>
           </div>
 
           {/* Quick Actions & Role switch */}
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-2 sm:gap-2.5">
             {/* Quick Action Buttons */}
             <div className="hidden sm:flex items-center gap-2">
               {db.hasPermission('canManageMedicine') && (
@@ -335,10 +335,10 @@ export const Header: React.FC<HeaderProps> = ({
                   id="btn-quick-add-medicine"
                   type="button"
                   onClick={() => handleQuickAction('add_medicine')}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl bg-pink-50 text-pink-800 hover:bg-pink-100 border border-pink-200 transition-colors shadow-2xs cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg bg-white text-[#1E293B] hover:bg-[#F5F7FA] border border-[#E2E8F0] transition-colors cursor-pointer"
                 >
-                  <Plus className="w-4 h-4 text-pink-600" />
-                  <span>+ Thêm thuốc</span>
+                  <Plus className="w-4 h-4 text-[#147D80]" />
+                  <span>Thêm thuốc</span>
                 </button>
               )}
 
@@ -348,9 +348,9 @@ export const Header: React.FC<HeaderProps> = ({
                     id="btn-quick-import"
                     type="button"
                     onClick={() => handleQuickAction('import')}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl bg-blue-50 text-blue-800 hover:bg-blue-100 border border-blue-200 transition-colors shadow-2xs cursor-pointer"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg bg-[#EAF5F4] text-[#147D80] hover:bg-[#D5EBEA] border border-[#B2D8D6] transition-colors cursor-pointer"
                   >
-                    <ArrowDownLeft className="w-4 h-4 text-blue-600" />
+                    <ArrowDownLeft className="w-4 h-4 text-[#147D80]" />
                     <span>Nhập kho</span>
                   </button>
 
@@ -358,7 +358,7 @@ export const Header: React.FC<HeaderProps> = ({
                     id="btn-quick-export"
                     type="button"
                     onClick={() => handleQuickAction('export')}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl bg-orange-500 text-white hover:bg-orange-600 shadow-xs transition-colors cursor-pointer"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg bg-[#147D80] text-white hover:bg-[#106366] transition-colors cursor-pointer"
                   >
                     <ArrowUpRight className="w-4 h-4" />
                     <span>Xuất cấp phát</span>
@@ -375,10 +375,10 @@ export const Header: React.FC<HeaderProps> = ({
                 const next = db.togglePrivacyMode();
                 setPrivacyMode(next);
               }}
-              className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border transition-all shadow-2xs cursor-pointer ${
+              className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg border transition-colors cursor-pointer ${
                 privacyMode
-                  ? 'bg-amber-100 text-amber-900 border-amber-300 ring-2 ring-amber-200'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200'
+                  ? 'bg-[#FFFBEB] text-[#B45309] border-[#FDE68A]'
+                  : 'bg-white text-[#1E293B] hover:bg-[#F5F7FA] border-[#E2E8F0]'
               }`}
               title={
                 privacyMode
@@ -388,12 +388,12 @@ export const Header: React.FC<HeaderProps> = ({
             >
               {privacyMode ? (
                 <>
-                  <EyeOff className="w-4 h-4 text-amber-700" />
+                  <EyeOff className="w-4 h-4 text-[#B45309]" />
                   <span>Ẩn tên (Bật)</span>
                 </>
               ) : (
                 <>
-                  <Eye className="w-4 h-4 text-slate-500" />
+                  <Eye className="w-4 h-4 text-[#64748B]" />
                   <span className="hidden md:inline">Ẩn tên HS</span>
                 </>
               )}
@@ -404,31 +404,31 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 type="button"
                 onClick={() => setRoleMenuOpen(!roleMenuOpen)}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all shadow-2xs cursor-pointer ${getRoleBadgeClasses(
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${getRoleBadgeClasses(
                   currentUser?.role
                 )}`}
                 title="Thông tin tài khoản & Đổi mật khẩu"
               >
                 {getRoleIcon(currentUser?.role)}
                 <div className="text-left">
-                  <span className="block text-[10px] uppercase tracking-wider font-extrabold opacity-80">
+                  <span className="block text-[10px] uppercase tracking-wider font-semibold text-[#64748B]">
                     {getRoleLabel(currentUser?.role || 'medic')}
                   </span>
-                  <span className="hidden sm:inline font-semibold text-slate-900 truncate max-w-[140px]">
+                  <span className="hidden sm:inline font-semibold text-[#1E293B] truncate max-w-[140px]">
                     {currentUser?.fullName || currentUser?.username}
                   </span>
                 </div>
-                <ChevronDown className="w-3.5 h-3.5 opacity-70 ml-0.5" />
+                <ChevronDown className="w-3.5 h-3.5 text-[#64748B] ml-0.5" />
               </button>
 
               {roleMenuOpen && (
-                <div className="absolute right-0 mt-1.5 w-72 bg-white rounded-2xl shadow-xl border border-slate-200 p-3 z-50 text-xs space-y-2 animate-in fade-in zoom-in-95 duration-150">
-                  <div className="pb-2.5 border-b border-slate-100">
-                    <p className="font-black text-slate-900 text-xs">{currentUser?.fullName}</p>
-                    <p className="text-[11px] text-slate-500 font-mono">
+                <div className="absolute right-0 mt-1.5 w-72 bg-white rounded-xl shadow-lg border border-[#E2E8F0] p-3 z-50 text-xs space-y-2">
+                  <div className="pb-2.5 border-b border-[#E2E8F0]">
+                    <p className="font-bold text-[#17324D] text-xs">{currentUser?.fullName}</p>
+                    <p className="text-[11px] text-[#64748B] font-mono">
                       TK: {currentUser?.username} {currentUser?.email ? `• ${currentUser.email}` : ''}
                     </p>
-                    <span className="inline-block mt-1 px-2 py-0.5 rounded bg-indigo-50 text-indigo-800 font-bold text-[10px] border border-indigo-200">
+                    <span className="inline-block mt-1 px-2 py-0.5 rounded bg-[#EAF5F4] text-[#147D80] font-semibold text-[10px] border border-[#B2D8D6]">
                       Vai trò: {getRoleLabel(currentUser?.role || 'medic')}
                     </span>
                   </div>
@@ -444,9 +444,9 @@ export const Header: React.FC<HeaderProps> = ({
                       setPwdSuccess(null);
                       setChangePwdOpen(true);
                     }}
-                    className="w-full flex items-center gap-2.5 p-2 rounded-xl hover:bg-slate-100 text-slate-800 font-bold transition-colors text-left cursor-pointer"
+                    className="w-full flex items-center gap-2.5 p-2 rounded-lg hover:bg-[#F5F7FA] text-[#1E293B] font-semibold transition-colors text-left cursor-pointer"
                   >
-                    <KeyRound className="w-4 h-4 text-indigo-600 shrink-0" />
+                    <KeyRound className="w-4 h-4 text-[#147D80] shrink-0" />
                     <span>Đổi mật khẩu cá nhân</span>
                   </button>
 
@@ -460,9 +460,9 @@ export const Header: React.FC<HeaderProps> = ({
                         logout();
                       }
                     }}
-                    className="w-full flex items-center gap-2.5 p-2 rounded-xl hover:bg-rose-50 text-rose-700 font-bold transition-colors text-left cursor-pointer"
+                    className="w-full flex items-center gap-2.5 p-2 rounded-lg hover:bg-[#FEF2F2] text-[#64748B] hover:text-[#B91C1C] font-semibold transition-colors text-left cursor-pointer"
                   >
-                    <LogOut className="w-4 h-4 text-rose-600 shrink-0" />
+                    <LogOut className="w-4 h-4 shrink-0" />
                     <span>Đăng xuất khỏi hệ thống</span>
                   </button>
                 </div>
@@ -477,10 +477,10 @@ export const Header: React.FC<HeaderProps> = ({
                   logout();
                 }
               }}
-              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:text-rose-700 bg-white hover:bg-rose-50 border border-slate-200 hover:border-rose-200 rounded-xl transition-all shadow-2xs active:scale-95 cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-[#64748B] hover:text-[#1E293B] bg-white hover:bg-[#F5F7FA] border border-[#E2E8F0] rounded-lg transition-colors cursor-pointer"
               title="Đăng xuất khỏi hệ thống"
             >
-              <LogOut className="w-4 h-4 text-rose-600" />
+              <LogOut className="w-4 h-4 text-[#64748B]" />
               <span className="hidden sm:inline">Đăng xuất</span>
             </button>
           </div>
@@ -489,18 +489,18 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Modal: Hướng dẫn & Link Sử dụng trên Máy tính khác */}
       {shareModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
+        <div className="fixed inset-0 bg-slate-900/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-lg w-full p-6 shadow-xl border border-[#E2E8F0] space-y-4">
+            <div className="flex items-start justify-between gap-3 border-b border-[#E2E8F0] pb-3">
               <div className="flex items-center gap-3">
-                <div className="w-11 h-11 rounded-2xl bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
-                  <Laptop className="w-6 h-6" />
+                <div className="w-10 h-10 rounded-lg bg-[#EAF5F4] text-[#147D80] flex items-center justify-center shrink-0">
+                  <Laptop className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="font-black text-base text-slate-900">
+                  <h3 className="font-bold text-base text-[#17324D]">
                     Sử Dụng Ứng Dụng Trên Máy Tính Khác
                   </h3>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-[#64748B]">
                     Đồng bộ trực tiếp Ca khám, Tồn kho thuốc & Danh sách học sinh giữa các máy
                   </p>
                 </div>
@@ -508,18 +508,18 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 type="button"
                 onClick={() => setShareModalOpen(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-xl hover:bg-slate-100 cursor-pointer"
+                className="p-1.5 text-[#64748B] hover:text-[#1E293B] rounded-lg hover:bg-[#F5F7FA] cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {isUsingDevUrl && (
-              <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-950 space-y-1">
-                <p className="font-bold text-amber-900">
-                  ⚠️ Lưu ý quan trọng vì sao máy khác chưa vào được:
+              <div className="p-3.5 rounded-lg bg-[#FFFBEB] border border-[#FDE68A] text-xs text-[#B45309] space-y-1">
+                <p className="font-bold text-[#B45309]">
+                  Lưu ý quan trọng khi mở trên máy tính khác:
                 </p>
-                <p className="leading-relaxed text-amber-800">
+                <p className="leading-relaxed text-[#92400E]">
                   Đường dẫn có chữ <code className="font-mono font-bold bg-amber-100 px-1 rounded">ais-dev-...</code> chỉ dành riêng cho tài khoản đang mở trình thiết kế nên máy tính khác sẽ bị chặn. Để mở trên máy tính khác, Quý Thầy/Cô vui lòng sử dụng <strong>Link Chia Sẻ (<code className="font-mono">ais-pre-...</code>)</strong> bên dưới:
                 </p>
               </div>

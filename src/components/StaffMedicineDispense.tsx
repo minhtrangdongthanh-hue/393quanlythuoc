@@ -1477,15 +1477,6 @@ export const StaffMedicineDispense: React.FC<StaffMedicineDispenseProps> = ({
                   <Plus className="w-3.5 h-3.5" />
                   <span>+ Thêm Thuốc</span>
                 </button>
-
-                <button
-                  type="button"
-                  onClick={handleAddSupplyRow}
-                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
-                >
-                  <BriefcaseMedical className="w-3.5 h-3.5" />
-                  <span>+ Vật tư y tế</span>
-                </button>
               </div>
             </div>
 
@@ -1668,61 +1659,6 @@ export const StaffMedicineDispense: React.FC<StaffMedicineDispenseProps> = ({
                     </div>
                   );
                 })}
-              </div>
-            )}
-
-            {/* Medical Supplies Used */}
-            {suppliesToUse.length > 0 && (
-              <div className="pt-3 border-t border-slate-100">
-                <span className="block font-bold text-slate-800 text-xs mb-2">
-                  Vật tư tiêu hao sơ cứu đi kèm:
-                </span>
-                <div className="space-y-2">
-                  {suppliesToUse.map((row, idx) => {
-                    const sup = allSupplies.find((s) => s.id === row.supplyId);
-                    return (
-                      <div key={idx} className="flex items-center gap-2 p-2 bg-slate-50 rounded-xl border border-slate-200 text-xs">
-                        <select
-                          value={row.supplyId}
-                          onChange={(e) => {
-                            const newId = e.target.value;
-                            setSuppliesToUse((prev) =>
-                              prev.map((item, i) => (i === idx ? { ...item, supplyId: newId } : item))
-                            );
-                          }}
-                          className="flex-1 p-1.5 border border-slate-200 rounded-lg bg-white font-bold"
-                        >
-                          {allSupplies.map((s) => (
-                            <option key={s.id} value={s.id}>
-                              {s.name} (Tồn: {s.quantity} {s.unit})
-                            </option>
-                          ))}
-                        </select>
-                        <input
-                          type="number"
-                          min="1"
-                          max={sup?.quantity || 99}
-                          value={row.quantity}
-                          onChange={(e) => {
-                            const q = Math.max(1, Number(e.target.value));
-                            setSuppliesToUse((prev) =>
-                              prev.map((item, i) => (i === idx ? { ...item, quantity: q } : item))
-                            );
-                          }}
-                          className="w-20 p-1.5 border border-slate-200 rounded-lg font-bold text-center"
-                        />
-                        <span className="text-slate-500 font-medium text-xs">{sup?.unit || 'cái'}</span>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveSupplyRow(idx)}
-                          className="p-1 text-rose-500 hover:bg-rose-100 rounded-lg"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
               </div>
             )}
           </div>

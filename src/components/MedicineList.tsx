@@ -24,8 +24,9 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   Sparkles,
+  Bandage,
 } from 'lucide-react';
-import { db, formatDateVN, getStatusText, getDaysRemaining } from '../services/db';
+import { db, formatDateVN, getStatusText, getDaysRemaining, isMedicalSupplyItem } from '../services/db';
 import { Medicine, MedicineStatus, MedicineBatch, Supplier } from '../types';
 
 import { ImportExcelModal, downloadStandardMedicineTemplate } from './ImportExcelModal';
@@ -68,7 +69,32 @@ export const MedicineList: React.FC<MedicineListProps> = ({
   // Search & Filter & Sort state for Catalog
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>(initialFilter);
+  const [categoryFilter, setCategoryFilter] = useState<'all' | 'medicine' | 'supply'>('all');
   const [sortBy, setSortBy] = useState<'stt' | 'name' | 'expDate' | 'stockAsc' | 'stockDesc'>('stt');
+
+  const handleToggleItemCategory = (med: Medicine, targetCat?: 'medicine' | 'supply') => {
+    const currentCat: 'medicine' | 'supply' =
+      med.itemCategory || (isMedicalSupplyItem(med) ? 'supply' : 'medicine');
+    const nextCat: 'medicine' | 'supply' = targetCat || (currentCat === 'supply' ? 'medicine' : 'supply');
+    if (nextCat === currentCat) return;
+    try {
+      const updated = db.setMedicineCategory(med.id, nextCat);
+      refreshData();
+      if (selectedMedicine?.id === med.id) {
+        const refreshed = db.getMedicines().find((m) => m.id === med.id);
+        if (refreshed) setSelectedMedicine(refreshed);
+        else setSelectedMedicine({ ...selectedMedicine, itemCategory: updated.itemCategory });
+      }
+      showToast(
+        'success',
+        `✓ Đã chuyển "${med.name}" sang nhóm ${
+          nextCat === 'supply' ? 'Vật tư y tế (Phần 2)' : 'Thuốc (Phần 1)'
+        }. Các sổ & báo cáo đã tự động cập nhật!`
+      );
+    } catch (err: any) {
+      showToast('error', err.message || 'Không thể đổi phân loại mặt hàng.');
+    }
+  };
 
   // React to initialFilter changes from parent navigation
   useEffect(() => {
@@ -238,8 +264,13 @@ export const MedicineList: React.FC<MedicineListProps> = ({
     const lowStockCount = medicines.filter((m) => (m.totalStock ?? 0) <= m.minStock && (m.totalStock ?? 0) > 0).length;
     const outOfStockCount = medicines.filter((m) => (m.totalStock ?? 0) === 0).length;
 
+    const supplyItemsCount = medicines.filter((m) => isMedicalSupplyItem(m)).length;
+    const medicineItemsCount = totalTypes - supplyItemsCount;
+
     return {
       totalTypes,
+      medicineItemsCount,
+      supplyItemsCount,
       totalStock,
       totalBatches,
       expiredCount: expiredBatches.length,
@@ -254,6 +285,10 @@ export const MedicineList: React.FC<MedicineListProps> = ({
   const processedMedicines = useMemo(() => {
     return medicines
       .filter((med) => {
+        const isSupply = isMedicalSupplyItem(med);
+        if (categoryFilter === 'medicine' && isSupply) return false;
+        if (categoryFilter === 'supply' && !isSupply) return false;
+
         // Status filter
         if (statusFilter !== 'all') {
           if (statusFilter === 'active' && med.computedStatus !== 'active') return false;
@@ -316,7 +351,7 @@ export const MedicineList: React.FC<MedicineListProps> = ({
         }
         return 0;
       });
-  }, [medicines, batches, searchTerm, statusFilter, sortBy]);
+  }, [medicines, batches, searchTerm, statusFilter, categoryFilter, sortBy]);
 
   // All Batches flattened list (Batches view)
   const processedBatches = useMemo(() => {
@@ -739,16 +774,61 @@ export const MedicineList: React.FC<MedicineListProps> = ({
               </div>
             </div>
 
+            {/* Category Filter Row: Phân loại Thuốc vs Vật tư y tế */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-slate-600 mr-1 text-[11px] font-bold">Phân loại nhóm:</span>
+                <button
+                  type="button"
+                  onClick={() => setCategoryFilter('all')}
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                    categoryFilter === 'all'
+                      ? 'bg-slate-800 text-white shadow-2xs'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  Tất cả ({metrics.totalTypes})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCategoryFilter('medicine')}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                    categoryFilter === 'medicine'
+                      ? 'bg-emerald-600 text-white shadow-2xs'
+                      : 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'
+                  }`}
+                >
+                  <Pill className="w-3.5 h-3.5" />
+                  <span>Thuốc ({metrics.medicineItemsCount})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCategoryFilter('supply')}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                    categoryFilter === 'supply'
+                      ? 'bg-[#17324D] text-white shadow-2xs'
+                      : 'bg-[#F5F7FA] text-[#17324D] border border-[#E2E8F0] hover:bg-slate-200/70'
+                  }`}
+                >
+                  <Bandage className="w-3.5 h-3.5" />
+                  <span>Vật tư y tế ({metrics.supplyItemsCount})</span>
+                </button>
+              </div>
+              <span className="text-[11px] text-slate-500">
+                Bấm trực tiếp vào nút <strong>[Thuốc | Vật tư]</strong> ở từng dòng để điều chỉnh loại mặt hàng
+              </span>
+            </div>
+
             {/* Quick tabs & Bulk expand toggle */}
             <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs">
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-slate-500 mr-1 text-[11px] font-semibold">Lọc nhanh:</span>
+                <span className="text-slate-500 mr-1 text-[11px] font-semibold">Lọc tình trạng:</span>
                 {[
                   { id: 'all', label: 'Tất cả' },
-                  { id: 'active', label: 'Đang dùng' },
-                  { id: 'low_stock', label: '🟡 Sắp hết' },
-                  { id: 'expiring_soon', label: '🟠 Sắp hết hạn' },
-                  { id: 'expired', label: '🔴 Đã hết hạn' },
+                  { id: 'active', label: 'Bình thường' },
+                  { id: 'low_stock', label: 'Dưới mức dự trữ' },
+                  { id: 'expiring_soon', label: 'Sắp hết hạn' },
+                  { id: 'expired', label: 'Đã hết hạn' },
                   { id: 'out_of_stock', label: 'Hết hàng' },
                 ].map((tab) => (
                   <button
@@ -783,7 +863,7 @@ export const MedicineList: React.FC<MedicineListProps> = ({
                   Thu gọn
                 </button>
                 <span className="text-slate-400 text-[11px] ml-2">
-                  Hiển thị <strong>{processedMedicines.length}</strong> / {medicines.length} thuốc
+                  Hiển thị <strong>{processedMedicines.length}</strong> / {medicines.length} mặt hàng
                 </span>
               </div>
             </div>
@@ -849,23 +929,56 @@ export const MedicineList: React.FC<MedicineListProps> = ({
                               </button>
                             </td>
 
-                            {/* Name & Code */}
+                            {/* Name & Code & Category Switcher */}
                             <td className="py-3 px-3">
                               <div className="flex items-start gap-2">
-                                <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 font-bold text-xs mt-0.5">
+                                <div
+                                  className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 font-bold text-xs mt-0.5 ${
+                                    isMedicalSupplyItem(med)
+                                      ? 'bg-amber-100 text-amber-800'
+                                      : 'bg-emerald-100 text-emerald-700'
+                                  }`}
+                                >
                                   {med.name.charAt(0)}
                                 </div>
-                                <div>
+                                <div className="space-y-1">
                                   <button
                                     type="button"
                                     onClick={() => setSelectedMedicine(med)}
-                                    className="font-bold text-slate-900 hover:text-emerald-700 text-left text-xs sm:text-sm cursor-pointer"
+                                    className="font-bold text-slate-900 hover:text-emerald-700 text-left text-xs sm:text-sm cursor-pointer block"
                                   >
                                     {med.name}
                                   </button>
                                   <span className="block font-mono text-[10px] text-slate-500">
                                     {med.code} • NSX: {med.manufacturer || 'Việt Nam'}
                                   </span>
+                                  {/* Interactive Category Toggle: Thuốc vs Vật tư y tế */}
+                                  <div className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-100 p-0.5 text-[10px]">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleToggleItemCategory(med, 'medicine')}
+                                        className={`px-2 py-0.5 rounded-md font-bold transition-all cursor-pointer ${
+                                          !isMedicalSupplyItem(med)
+                                            ? 'bg-emerald-600 text-white shadow-2xs'
+                                            : 'text-slate-500 hover:text-slate-800'
+                                        }`}
+                                        title="Đặt mặt hàng này là Thuốc (Phần 1 trên báo cáo)"
+                                      >
+                                        Thuốc
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleToggleItemCategory(med, 'supply')}
+                                        className={`px-2 py-0.5 rounded-md font-bold transition-all cursor-pointer ${
+                                          isMedicalSupplyItem(med)
+                                            ? 'bg-[#17324D] text-white shadow-2xs'
+                                            : 'text-slate-500 hover:text-slate-800'
+                                        }`}
+                                        title="Đặt mặt hàng này là Vật tư y tế (Phần 2 trên báo cáo)"
+                                      >
+                                        Vật tư
+                                      </button>
+                                  </div>
                                 </div>
                               </div>
                             </td>
@@ -1271,13 +1384,27 @@ export const MedicineList: React.FC<MedicineListProps> = ({
                           {displayStt}
                         </td>
                         <td className="border border-slate-300 py-1.5 px-2.5 font-semibold text-slate-900 whitespace-nowrap">
-                          <button
-                            type="button"
-                            onClick={() => setSelectedMedicine(med)}
-                            className="hover:text-emerald-700 hover:underline text-left cursor-pointer"
-                          >
-                            {med.name}
-                          </button>
+                          <div className="flex items-center justify-between gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedMedicine(med)}
+                              className="hover:text-emerald-700 hover:underline text-left cursor-pointer"
+                            >
+                              {med.name}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleToggleItemCategory(med)}
+                              className={`px-1.5 py-0.5 rounded text-[9px] font-bold border transition-colors cursor-pointer shrink-0 ${
+                                isMedicalSupplyItem(med)
+                                  ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
+                                  : 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                              }`}
+                              title="Bấm để chuyển đổi giữa Thuốc và Vật tư y tế"
+                            >
+                              {isMedicalSupplyItem(med) ? 'Vật tư ⇄' : 'Thuốc ⇄'}
+                            </button>
+                          </div>
                         </td>
                         <td className="border border-slate-300 py-1.5 px-2 text-slate-700 whitespace-nowrap">
                           {med.activeIngredient || ''}
@@ -1396,9 +1523,9 @@ export const MedicineList: React.FC<MedicineListProps> = ({
                 <span className="text-slate-500 mr-1 text-[11px] font-semibold">Bộ lọc nhanh:</span>
                 {[
                   { id: 'all', label: 'Tất cả lô' },
-                  { id: 'expiring_soon', label: '🟠 Cận date ≤30 ngày' },
-                  { id: 'expired', label: '🔴 Đã hết hạn' },
-                  { id: 'active', label: '🟢 Còn hạn an toàn' },
+                  { id: 'expiring_soon', label: 'Cận hạn ≤30 ngày' },
+                  { id: 'expired', label: 'Đã hết hạn' },
+                  { id: 'active', label: 'Bình thường' },
                   { id: 'out_of_stock', label: 'Hết tồn' },
                 ].map((tab) => (
                   <button
@@ -1732,9 +1859,35 @@ export const MedicineList: React.FC<MedicineListProps> = ({
             {/* Modal Header */}
             <div className="p-5 border-b border-slate-200 bg-slate-50 flex items-start justify-between">
               <div>
-                <span className="inline-block px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-100 text-emerald-800 mb-1">
-                  MÃ THUỐC: {selectedMedicine.code}
-                </span>
+                <div className="flex flex-wrap items-center gap-2 mb-1">
+                  <span className="inline-block px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-100 text-emerald-800">
+                    MÃ: {selectedMedicine.code}
+                  </span>
+                  <div className="inline-flex items-center rounded-lg border border-slate-200 bg-white p-0.5 text-[10px]">
+                    <button
+                      type="button"
+                      onClick={() => handleToggleItemCategory(selectedMedicine, 'medicine')}
+                      className={`px-2 py-0.5 rounded-md font-bold transition-all cursor-pointer ${
+                        !isMedicalSupplyItem(selectedMedicine)
+                          ? 'bg-emerald-600 text-white'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      Thuốc
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleItemCategory(selectedMedicine, 'supply')}
+                      className={`px-2 py-0.5 rounded-md font-bold transition-all cursor-pointer ${
+                        isMedicalSupplyItem(selectedMedicine)
+                          ? 'bg-[#17324D] text-white'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      Vật tư y tế
+                    </button>
+                  </div>
+                </div>
                 <h3 className="text-lg sm:text-xl font-black text-slate-900">
                   {selectedMedicine.name}
                 </h3>

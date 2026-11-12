@@ -105,6 +105,7 @@ export interface Medicine {
   unitPrice?: number;         // (Tùy chọn/Đã bỏ trường giá)
   storageLocation: string;    // Vị trí bảo quản (Tủ A ngăn 2,...)
   notes?: string;             // Ghi chú
+  itemCategory?: 'medicine' | 'supply'; // Phân loại: 'medicine' (Thuốc) | 'supply' (Vật tư y tế)
   isDemo?: boolean;           // Dữ liệu mẫu
   createdAt: string;
   updatedAt: string;

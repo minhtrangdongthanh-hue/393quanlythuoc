@@ -140,35 +140,29 @@ const SidebarComponent: React.FC<SidebarProps> = ({
           id: 'clinic_reception',
           label: 'Tiếp nhận khám sơ cứu',
           icon: Stethoscope,
-          badge: visitsToday > 0 ? `${visitsToday} ca trong ngày` : '0 ca hôm nay',
-          badgeColor: visitsToday > 0 ? 'bg-orange-100 text-orange-800 font-bold border border-orange-200' : 'bg-slate-100 text-slate-600',
+          badge: visitsToday > 0 ? `${visitsToday} ca` : null,
+          badgeColor: 'bg-[#EAF5F4] text-[#147D80] border border-[#B2D8D6]',
         },
         {
           id: 'staff_dispense',
           label: 'Cho thuốc Giáo viên & CNV',
           icon: BriefcaseMedical,
           badge: 'GV & NV',
-          badgeColor: 'bg-pink-100 text-pink-800 font-bold border border-pink-200',
+          badgeColor: 'bg-[#F5F7FA] text-[#64748B] border border-[#E2E8F0]',
         },
         {
           id: 'clinic_visits',
           label: 'Sổ theo dõi phòng y tế',
           icon: BookOpen,
           badge: visitsToday > 0 ? `${visitsToday} ca hôm nay` : null,
-          badgeColor: 'bg-blue-100 text-blue-800 font-bold border border-blue-200',
+          badgeColor: 'bg-[#EFF6FF] text-[#1D4ED8] border border-[#BFDBFE]',
         },
         {
           id: 'students',
           label: 'Hồ sơ sức khỏe học sinh',
           icon: Users,
           badge: `${studentsCount} HS`,
-          badgeColor: 'bg-blue-100 text-blue-800 border border-blue-200',
-        },
-        {
-          id: 'school_health',
-          label: 'Tai nạn & Khám định kỳ',
-          icon: Activity,
-          badge: null,
+          badgeColor: 'bg-[#F5F7FA] text-[#64748B] border border-[#E2E8F0]',
         },
       ],
     },
@@ -177,10 +171,10 @@ const SidebarComponent: React.FC<SidebarProps> = ({
       items: [
         {
           id: 'medicines',
-          label: 'Quản lý thuốc',
+          label: 'Quản lý thuốc & vật tư',
           icon: Pill,
-          badge: `${metrics.totalMedicineTypes} loại`,
-          badgeColor: 'bg-slate-100 text-slate-700',
+          badge: `${metrics.totalMedicineTypes} mục`,
+          badgeColor: 'bg-[#F5F7FA] text-[#64748B] border border-[#E2E8F0]',
         },
         {
           id: 'import_medicine',
@@ -193,21 +187,21 @@ const SidebarComponent: React.FC<SidebarProps> = ({
           label: 'Xuất cấp phát (Hạn gần)',
           icon: ArrowUpRight,
           badge: 'FEFO',
-          badgeColor: 'bg-orange-100 text-orange-800 font-bold border border-orange-200',
+          badgeColor: 'bg-[#EAF5F4] text-[#147D80] border border-[#B2D8D6]',
         },
         {
           id: 'stock_balance',
           label: 'Sổ nhập - xuất - tồn kho',
           icon: BookOpen,
           badge: 'Mẫu A4',
-          badgeColor: 'bg-pink-100 text-pink-800 font-bold border border-pink-200',
+          badgeColor: 'bg-[#F5F7FA] text-[#64748B] border border-[#E2E8F0]',
         },
         {
           id: 'inventory_check',
           label: 'Kiểm kê kho định kỳ',
           icon: ClipboardCheck,
-          badge: pendingChecks > 0 ? `${pendingChecks} chờ duyệt` : 'Chuẩn',
-          badgeColor: pendingChecks > 0 ? 'bg-amber-100 text-amber-800' : 'bg-purple-100 text-purple-800',
+          badge: pendingChecks > 0 ? `${pendingChecks} chờ duyệt` : null,
+          badgeColor: 'bg-[#FFFBEB] text-[#B45309] border border-[#FDE68A]',
         },
         {
           id: 'stock_report',
@@ -220,14 +214,14 @@ const SidebarComponent: React.FC<SidebarProps> = ({
           label: 'Theo dõi thuốc hết hạn',
           icon: ClockAlert,
           badge: metrics.expiredCount > 0 ? `${metrics.expiredCount} hết hạn` : null,
-          badgeColor: 'bg-rose-100 text-rose-700',
+          badgeColor: 'bg-[#FEF2F2] text-[#B91C1C] border border-[#FECACA]',
         },
         {
           id: 'low_stock',
           label: 'Thuốc dưới mức dự trữ',
           icon: AlertTriangle,
           badge: metrics.lowStockCount > 0 ? `${metrics.lowStockCount} loại` : null,
-          badgeColor: 'bg-amber-100 text-amber-700',
+          badgeColor: 'bg-[#FFFBEB] text-[#B45309] border border-[#FDE68A]',
         },
         {
           id: 'supply_usage',
@@ -251,28 +245,28 @@ const SidebarComponent: React.FC<SidebarProps> = ({
           label: 'Truy xuất thuốc - Học sinh',
           icon: FileSpreadsheet,
           badge: 'FEFO',
-          badgeColor: 'bg-emerald-100 text-emerald-800',
+          badgeColor: 'bg-[#F5F7FA] text-[#64748B] border border-[#E2E8F0]',
         },
         {
           id: 'print_templates',
           label: 'Mẫu in sổ A4 chuẩn Bộ',
           icon: Printer,
           badge: 'A4',
-          badgeColor: 'bg-slate-100 text-slate-700',
+          badgeColor: 'bg-[#F5F7FA] text-[#64748B] border border-[#E2E8F0]',
         },
         {
           id: 'audit_logs',
           label: 'Bảo mật & Phân quyền',
           icon: ShieldCheck,
           badge: 'Quản trị',
-          badgeColor: 'bg-indigo-100 text-indigo-800 border border-indigo-200',
+          badgeColor: 'bg-[#F5F7FA] text-[#64748B] border border-[#E2E8F0]',
         },
         {
           id: 'settings',
           label: 'Cài đặt & Sao lưu dữ liệu',
           icon: Settings,
           badge: 'Quản trị',
-          badgeColor: 'bg-indigo-100 text-indigo-800',
+          badgeColor: 'bg-[#F5F7FA] text-[#64748B] border border-[#E2E8F0]',
         },
       ],
     },
@@ -294,7 +288,7 @@ const SidebarComponent: React.FC<SidebarProps> = ({
       {/* Mobile overlay backdrop */}
       {open && (
         <div
-          className="fixed inset-0 bg-slate-900/50 z-40 lg:hidden backdrop-blur-xs transition-opacity"
+          className="fixed inset-0 bg-slate-900/40 z-40 lg:hidden transition-opacity"
           onClick={handleClose}
         />
       )}
@@ -302,22 +296,22 @@ const SidebarComponent: React.FC<SidebarProps> = ({
       {/* Sidebar container */}
       <aside
         id="app-sidebar"
-        className={`fixed top-0 bottom-0 left-0 z-50 bg-white border-r border-slate-200 flex flex-col transition-all duration-200 ease-in-out lg:static lg:translate-x-0 ${
+        className={`fixed top-0 bottom-0 left-0 z-50 bg-white border-r border-[#E2E8F0] flex flex-col transition-all duration-200 ease-in-out lg:static lg:translate-x-0 ${
           isCollapsedDesktop ? 'lg:w-20' : 'lg:w-72'
         } ${open ? 'translate-x-0 w-72' : '-translate-x-full w-72'}`}
       >
         {/* School branding header */}
-        <div className={`p-3.5 border-b border-slate-100 flex items-center justify-between bg-slate-50/70 ${isCollapsedDesktop ? 'lg:flex-col lg:gap-2 lg:py-3' : ''}`}>
+        <div className={`px-4 py-3.5 border-b border-[#E2E8F0] flex items-center justify-between bg-white ${isCollapsedDesktop ? 'lg:flex-col lg:gap-2 lg:py-3' : ''}`}>
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 via-sky-600 to-orange-500 text-white flex items-center justify-center font-bold text-sm shadow-xs ring-2 ring-blue-100 shrink-0">
-              <HeartPulse className="w-5 h-5" />
+            <div className="w-9 h-9 rounded-lg bg-[#17324D] text-white flex items-center justify-center font-semibold text-sm shrink-0">
+              <HeartPulse className="w-4 h-4" />
             </div>
             {!isCollapsedDesktop && (
               <div className="min-w-0">
-                <p className="text-xs font-extrabold text-blue-950 uppercase tracking-wide truncate">
+                <p className="text-xs font-bold text-[#17324D] uppercase tracking-wide truncate">
                   Y Tế Học Đường
                 </p>
-                <p className="text-[11px] text-slate-500 font-medium truncate">THCS Đông Thạnh</p>
+                <p className="text-[11px] text-[#64748B] font-medium truncate">THCS Đông Thạnh</p>
               </div>
             )}
           </div>
@@ -327,7 +321,7 @@ const SidebarComponent: React.FC<SidebarProps> = ({
             <button
               type="button"
               onClick={toggleDesktopCollapse}
-              className="hidden lg:flex p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 cursor-pointer"
+              className="hidden lg:flex p-1.5 rounded-lg text-[#64748B] hover:text-[#17324D] hover:bg-[#F5F7FA] cursor-pointer"
               title={isCollapsedDesktop ? 'Mở rộng thanh menu' : 'Thu nhỏ thanh menu (tiết kiệm màn hình)'}
             >
               {isCollapsedDesktop ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
@@ -337,7 +331,7 @@ const SidebarComponent: React.FC<SidebarProps> = ({
             <button
               type="button"
               onClick={handleClose}
-              className="lg:hidden p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200/60"
+              className="lg:hidden p-1.5 rounded-lg text-[#64748B] hover:text-[#17324D] hover:bg-[#F5F7FA]"
               title="Đóng thanh điều hướng"
             >
               <X className="w-5 h-5" />
@@ -345,32 +339,32 @@ const SidebarComponent: React.FC<SidebarProps> = ({
           </div>
         </div>
 
-        {/* Quick Health Summary Pill */}
+        {/* Quick Health Summary Bar */}
         <button
           type="button"
           onClick={() => {
             onSelectTab('clinic_reception');
             if (open) handleClose();
           }}
-          className={`mx-2 my-2 p-2 bg-pink-50/90 hover:bg-pink-100/90 border border-pink-200/80 rounded-xl flex items-center transition-colors cursor-pointer text-left group ${
+          className={`mx-3 my-2.5 p-2 bg-[#F5F7FA] hover:bg-[#EAF5F4] border border-[#E2E8F0] rounded-lg flex items-center transition-colors cursor-pointer text-left group ${
             isCollapsedDesktop ? 'lg:justify-center lg:mx-2 lg:p-2' : 'justify-between px-3 py-2'
           }`}
           title={`Xem các ca tiếp nhận thực tế hôm nay (${visitsToday} ca)`}
         >
           {isCollapsedDesktop ? (
             <div className="relative">
-              <HeartPulse className="w-5 h-5 text-orange-600 group-hover:scale-110 transition-transform" />
-              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-orange-500 ring-2 ring-white"></span>
+              <HeartPulse className="w-4 h-4 text-[#147D80]" />
+              <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-[#15803D] ring-2 ring-white"></span>
             </div>
           ) : (
             <>
               <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse"></span>
-                <span className="font-semibold text-pink-900 text-[11px] group-hover:text-pink-950">
+                <span className="w-2 h-2 rounded-full bg-[#15803D]"></span>
+                <span className="font-semibold text-[#17324D] text-xs">
                   Phòng Y Tế
                 </span>
               </div>
-              <span className="text-[10px] font-bold text-orange-700 bg-white px-2 py-0.5 rounded-md border border-orange-200 shadow-2xs group-hover:border-orange-300">
+              <span className="text-[11px] font-semibold text-[#147D80] bg-white px-2 py-0.5 rounded border border-[#E2E8F0] tabular-nums">
                 {visitsToday} ca hôm nay
               </span>
             </>
@@ -378,11 +372,11 @@ const SidebarComponent: React.FC<SidebarProps> = ({
         </button>
 
         {/* Navigation list */}
-        <nav className="flex-1 overflow-y-auto px-2 py-1 space-y-3">
+        <nav className="flex-1 overflow-y-auto px-3 py-1 space-y-4">
           {sections.map((sec, sIdx) => (
             <div key={sIdx} className="space-y-1">
               {!isCollapsedDesktop && (
-                <p className="px-2.5 py-1 text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
+                <p className="px-2.5 py-1 text-[11px] font-bold text-[#64748B] uppercase tracking-wider">
                   {sec.title}
                 </p>
               )}
@@ -405,20 +399,20 @@ const SidebarComponent: React.FC<SidebarProps> = ({
                       handleClose();
                     }}
                     title={item.label}
-                    className={`w-full flex items-center rounded-xl text-xs font-semibold transition-all duration-150 cursor-pointer ${
+                    className={`w-full flex items-center rounded-lg text-[13px] transition-colors duration-150 cursor-pointer ${
                       isCollapsedDesktop
-                        ? 'lg:justify-center lg:p-2.5 px-3 py-2.5 justify-between'
-                        : 'justify-between px-3 py-2.5'
+                        ? 'lg:justify-center lg:p-2.5 px-3 py-2 justify-between'
+                        : 'justify-between px-3 py-2'
                     } ${
                       isActive
-                        ? 'bg-blue-600 text-white shadow-xs font-bold'
-                        : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
+                        ? 'bg-[#EAF5F4] text-[#17324D] font-semibold border-l-[3px] border-[#147D80]'
+                        : 'text-[#1E293B] font-medium hover:bg-[#F5F7FA] hover:text-[#17324D]'
                     }`}
                   >
                     <div className="flex items-center gap-2.5 truncate">
                       <Icon
                         className={`w-4 h-4 shrink-0 transition-colors ${
-                          isActive ? 'text-white' : 'text-slate-500'
+                          isActive ? 'text-[#147D80]' : 'text-[#64748B]'
                         }`}
                       />
                       {!isCollapsedDesktop && <span className="truncate">{item.label}</span>}
@@ -426,10 +420,10 @@ const SidebarComponent: React.FC<SidebarProps> = ({
 
                     {!isCollapsedDesktop && item.badge && (
                       <span
-                        className={`ml-2 px-2 py-0.5 text-[10px] font-bold rounded-full shrink-0 whitespace-nowrap ${
+                        className={`ml-2 px-2 py-0.5 text-[10px] font-semibold rounded shrink-0 whitespace-nowrap tabular-nums ${
                           isActive
-                            ? 'bg-white/20 text-white'
-                            : item.badgeColor || 'bg-slate-100 text-slate-700'
+                            ? 'bg-white text-[#147D80] border border-[#B2D8D6]'
+                            : item.badgeColor || 'bg-[#F5F7FA] text-[#64748B] border border-[#E2E8F0]'
                         }`}
                       >
                         {item.badge}
@@ -443,44 +437,44 @@ const SidebarComponent: React.FC<SidebarProps> = ({
         </nav>
 
         {/* User profile & safety advice footer */}
-        <div className={`p-2.5 border-t border-slate-200 bg-slate-50 space-y-2 ${isCollapsedDesktop ? 'lg:p-2' : ''}`}>
+        <div className={`p-3 border-t border-[#E2E8F0] bg-[#F5F7FA] space-y-2 ${isCollapsedDesktop ? 'lg:p-2' : ''}`}>
           <div className={`flex items-center ${isCollapsedDesktop ? 'lg:justify-center' : 'justify-between'}`}>
             <div className="flex items-center gap-2">
               <div
-                className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-800 font-bold flex items-center justify-center text-xs border border-emerald-300 shrink-0"
+                className="w-8 h-8 rounded-full bg-[#17324D] text-white font-semibold flex items-center justify-center text-xs shrink-0"
                 title={currentUser?.fullName}
               >
                 {currentUser?.fullName?.charAt(0) || 'Y'}
               </div>
               {!isCollapsedDesktop && (
                 <div className="leading-tight">
-                  <p className="text-xs font-bold text-slate-800 truncate max-w-[120px]">
+                  <p className="text-xs font-semibold text-[#1E293B] truncate max-w-[125px]">
                     {currentUser?.fullName?.split('(')[0]?.trim() || 'Cán bộ Y tế'}
                   </p>
-                  <p className="text-[10px] text-slate-500 font-medium">
+                  <p className="text-[11px] text-[#64748B] font-medium">
                     {getRoleLabel(currentUser?.role || 'medic')}
                   </p>
                 </div>
               )}
             </div>
             {!isCollapsedDesktop && (
-              <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-200">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
-                Online
+              <span className="flex items-center gap-1 text-[10px] font-semibold text-[#15803D] bg-[#F0FDF4] px-2 py-0.5 rounded border border-[#BBF7D0]">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#15803D]"></span>
+                Trực tuyến
               </span>
             )}
           </div>
 
           {!isCollapsedDesktop && (
-            <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between gap-2">
-              <span className="text-[10px] text-slate-500 truncate">
-                KT dị ứng trước khi cấp.
+            <div className="pt-2 border-t border-[#E2E8F0] flex items-center justify-between gap-2">
+              <span className="text-[11px] text-[#64748B] truncate">
+                Kiểm tra dị ứng trước khi cấp
               </span>
               {onLogout && (
                 <button
                   type="button"
                   onClick={onLogout}
-                  className="flex items-center gap-1 text-[11px] font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-2 py-1 rounded-lg transition-colors shrink-0 cursor-pointer"
+                  className="flex items-center gap-1 text-[11px] font-semibold text-[#64748B] hover:text-[#1E293B] hover:bg-white px-2 py-1 rounded-lg border border-transparent hover:border-[#E2E8F0] transition-colors shrink-0 cursor-pointer"
                   title="Đăng xuất khỏi hệ thống"
                 >
                   <LogOut className="w-3.5 h-3.5" />

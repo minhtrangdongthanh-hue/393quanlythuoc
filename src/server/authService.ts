@@ -176,21 +176,6 @@ export class ServerAuthStore {
     this.load();
   }
 
-  // Persist hashes and sessions in server-only Redis, never in browser storage.
-  public exportSnapshot() {
-    return { accounts: this.accounts, sessions: [...this.sessions.values()], outbox: this.outbox };
-  }
-
-  public importSnapshot(snapshot: any) {
-    if (!snapshot || !Array.isArray(snapshot.accounts) || !snapshot.accounts.length ||
-        !Array.isArray(snapshot.sessions) || !Array.isArray(snapshot.outbox)) {
-      throw new Error('Invalid durable authentication snapshot');
-    }
-    this.accounts = snapshot.accounts;
-    this.sessions = new Map(snapshot.sessions.map((session: ServerSession) => [session.tokenHash, session]));
-    this.outbox = snapshot.outbox;
-  }
-
   private ensureDir() {
     try {
       if (!fs.existsSync(this.dataDir)) {

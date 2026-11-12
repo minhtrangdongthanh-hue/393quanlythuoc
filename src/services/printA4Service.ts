@@ -1,5 +1,6 @@
 import { InventoryCheck, InventoryTransaction, MedicineBatch, StockInOutBalanceRow, MedicineDisposal, ClinicVisit, DisposalCouncilMember, SanitaryNapkinProduct, SanitaryNapkinDispatch, SanitaryNapkinImport } from '../types';
 import { formatDateVN, formatVND, formatTime24H, formatDateTimeVN } from '../utils/helpers';
+import { isMedicalSupplyItem } from './db';
 import { templateConfigService } from './templateConfigService';
 
 interface PrintHeaderConfig {
@@ -545,25 +546,14 @@ export function renderSignaturesTable(customSigners?: {
   `;
 }
 
-// 1. In Sổ Nhập - Xuất - Tồn A4 Landscape
-export function printStockBalanceA4(
-  rows: StockInOutBalanceRow[],
-  periodLabel: string,
-  schoolName = 'TRƯỜNG THCS ĐÔNG THẠNH'
-) {
-  const content = `
-    ${renderHeader({
-      schoolName,
-      title: 'SỔ THEO DÕI NHẬP - XUẤT - TỒN THUỐC VÀ VẬT TƯ Y TẾ',
-      subtitle: `Kỳ báo cáo: ${periodLabel}`,
-    })}
-
+function renderStockSectionTableHtml(list: StockInOutBalanceRow[], isSupplySection: boolean) {
+  return `
     <table class="data-table">
       <thead>
         <tr>
           <th rowspan="2" style="width: 35px;">STT</th>
-          <th rowspan="2" style="width: 80px;">Mã thuốc</th>
-          <th rowspan="2">Tên thuốc, nồng độ, hàm lượng</th>
+          <th rowspan="2" style="width: 80px;">${isSupplySection ? 'Mã vật tư' : 'Mã thuốc'}</th>
+          <th rowspan="2">${isSupplySection ? 'Tên vật tư y tế, quy cách' : 'Tên thuốc, nồng độ, hàm lượng'}</th>
           <th rowspan="2" style="width: 75px;">Số lô</th>
           <th rowspan="2" style="width: 75px;">Hạn dùng</th>
           <th rowspan="2" style="width: 50px;">ĐVT</th>
@@ -579,7 +569,7 @@ export function printStockBalanceA4(
         </tr>
       </thead>
       <tbody>
-        ${rows
+        ${list
           .map(
             (r, i) => `
           <tr>
@@ -602,16 +592,59 @@ export function printStockBalanceA4(
       </tbody>
       <tfoot>
         <tr style="font-weight: bold; background: #f1f5f9;">
-          <td colspan="6" class="text-center">TỔNG CỘNG (${rows.length} mục)</td>
-          <td class="text-right">${rows.reduce((s, r) => s + r.openingStock, 0)}</td>
-          <td class="text-right">${rows.reduce((s, r) => s + r.importQuantity, 0)}</td>
-          <td class="text-right">${rows.reduce((s, r) => s + r.exportQuantity, 0)}</td>
-          <td class="text-right">${rows.reduce((s, r) => s + r.adjustmentQuantity, 0)}</td>
-          <td class="text-right font-bold">${rows.reduce((s, r) => s + r.closingStock, 0)}</td>
+          <td colspan="6" class="text-center">CỘNG ${isSupplySection ? 'VẬT TƯ Y TẾ' : 'THUỐC'} (${list.length} mục)</td>
+          <td class="text-right">${list.reduce((s, r) => s + r.openingStock, 0)}</td>
+          <td class="text-right">${list.reduce((s, r) => s + r.importQuantity, 0)}</td>
+          <td class="text-right">${list.reduce((s, r) => s + r.exportQuantity, 0)}</td>
+          <td class="text-right">${list.reduce((s, r) => s + r.adjustmentQuantity, 0)}</td>
+          <td class="text-right font-bold">${list.reduce((s, r) => s + r.closingStock, 0)}</td>
           <td></td>
         </tr>
       </tfoot>
     </table>
+  `;
+}
+
+// 1. In Sổ Nhập - Xuất - Tồn A4 Landscape
+export function printStockBalanceA4(
+  rows: StockInOutBalanceRow[],
+  periodLabel: string,
+  schoolName = 'TRƯỜNG THCS ĐÔNG THẠNH'
+) {
+  const medRows = rows.filter(
+    (r) =>
+      !isMedicalSupplyItem({
+        medicineId: r.medicineId,
+        code: r.medicineCode,
+        name: r.medicineName,
+        batchNumber: r.batchNumber,
+      })
+  );
+  const supRows = rows.filter((r) =>
+    isMedicalSupplyItem({
+      medicineId: r.medicineId,
+      code: r.medicineCode,
+      name: r.medicineName,
+      batchNumber: r.batchNumber,
+    })
+  );
+
+  const content = `
+    ${renderHeader({
+      schoolName,
+      title: 'SỔ THEO DÕI NHẬP - XUẤT - TỒN THUỐC VÀ VẬT TƯ Y TẾ',
+      subtitle: `Kỳ báo cáo: ${periodLabel}`,
+    })}
+
+    <div style="font-weight: bold; font-size: 11pt; margin: 12px 0 4px 0; text-transform: uppercase;">
+      PHẦN 1: BẢNG NHẬP - XUẤT - TỒN THUỐC (DƯỢC PHẨM) (${medRows.length} LÔ)
+    </div>
+    ${renderStockSectionTableHtml(medRows, false)}
+
+    <div style="font-weight: bold; font-size: 11pt; margin: 16px 0 4px 0; text-transform: uppercase;">
+      PHẦN 2: BẢNG NHẬP - XUẤT - TỒN VẬT TƯ Y TẾ (${supRows.length} LÔ)
+    </div>
+    ${renderStockSectionTableHtml(supRows, true)}
 
     ${renderSignaturesTable()}
   `;
@@ -625,6 +658,24 @@ export function exportStockBalanceWordA4(
   periodLabel: string,
   schoolName = 'TRƯỜNG THCS ĐÔNG THẠNH'
 ) {
+  const medRows = rows.filter(
+    (r) =>
+      !isMedicalSupplyItem({
+        medicineId: r.medicineId,
+        code: r.medicineCode,
+        name: r.medicineName,
+        batchNumber: r.batchNumber,
+      })
+  );
+  const supRows = rows.filter((r) =>
+    isMedicalSupplyItem({
+      medicineId: r.medicineId,
+      code: r.medicineCode,
+      name: r.medicineName,
+      batchNumber: r.batchNumber,
+    })
+  );
+
   const content = `
     ${renderHeader({
       schoolName,
@@ -632,60 +683,15 @@ export function exportStockBalanceWordA4(
       subtitle: `Kỳ báo cáo: ${periodLabel}`,
     })}
 
-    <table class="data-table">
-      <thead>
-        <tr>
-          <th rowspan="2" style="width: 35px;">STT</th>
-          <th rowspan="2" style="width: 80px;">Mã thuốc</th>
-          <th rowspan="2">Tên thuốc, nồng độ, hàm lượng</th>
-          <th rowspan="2" style="width: 75px;">Số lô</th>
-          <th rowspan="2" style="width: 75px;">Hạn dùng</th>
-          <th rowspan="2" style="width: 50px;">ĐVT</th>
-          <th rowspan="2" style="width: 60px;">Tồn đầu kỳ</th>
-          <th colspan="2">Phát sinh trong kỳ</th>
-          <th rowspan="2" style="width: 60px;">Điều chỉnh</th>
-          <th rowspan="2" style="width: 60px;">Tồn cuối kỳ</th>
-          <th rowspan="2" style="width: 90px;">Vị trí lưu trữ</th>
-        </tr>
-        <tr>
-          <th style="width: 60px;">Nhập (+)</th>
-          <th style="width: 60px;">Xuất (-)</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${rows
-          .map(
-            (r, idx) => `
-          <tr>
-            <td class="text-center">${idx + 1}</td>
-            <td class="text-center font-bold">${r.medicineCode}</td>
-            <td>${r.medicineName}</td>
-            <td class="text-center font-mono">${r.batchNumber}</td>
-            <td class="text-center">${formatDateVN(r.expDate)}</td>
-            <td class="text-center">${r.unit}</td>
-            <td class="text-right">${r.openingStock}</td>
-            <td class="text-right text-emerald-600">${r.importQuantity > 0 ? '+' + r.importQuantity : '0'}</td>
-            <td class="text-right text-rose-600">${r.exportQuantity > 0 ? '-' + r.exportQuantity : '0'}</td>
-            <td class="text-right text-amber-600">${r.adjustmentQuantity !== 0 ? (r.adjustmentQuantity > 0 ? '+' : '') + r.adjustmentQuantity : '0'}</td>
-            <td class="text-right font-bold">${r.closingStock}</td>
-            <td class="text-center">${r.notes || 'Tủ thuốc y tế'}</td>
-          </tr>
-        `
-          )
-          .join('')}
-      </tbody>
-      <tfoot>
-        <tr style="font-weight: bold; background: #f1f5f9;">
-          <td colspan="6" class="text-center">TỔNG CỘNG (${rows.length} mục)</td>
-          <td class="text-right">${rows.reduce((s, r) => s + r.openingStock, 0)}</td>
-          <td class="text-right">${rows.reduce((s, r) => s + r.importQuantity, 0)}</td>
-          <td class="text-right">${rows.reduce((s, r) => s + r.exportQuantity, 0)}</td>
-          <td class="text-right">${rows.reduce((s, r) => s + r.adjustmentQuantity, 0)}</td>
-          <td class="text-right font-bold">${rows.reduce((s, r) => s + r.closingStock, 0)}</td>
-          <td></td>
-        </tr>
-      </tfoot>
-    </table>
+    <div style="font-weight: bold; font-size: 11pt; margin: 12pt 0 4pt 0; text-transform: uppercase;">
+      PHẦN 1: BẢNG NHẬP - XUẤT - TỒN THUỐC (DƯỢC PHẨM) (${medRows.length} LÔ)
+    </div>
+    ${renderStockSectionTableHtml(medRows, false)}
+
+    <div style="font-weight: bold; font-size: 11pt; margin: 16pt 0 4pt 0; text-transform: uppercase;">
+      PHẦN 2: BẢNG NHẬP - XUẤT - TỒN VẬT TƯ Y TẾ (${supRows.length} LÔ)
+    </div>
+    ${renderStockSectionTableHtml(supRows, true)}
 
     ${renderSignaturesTable()}
   `;

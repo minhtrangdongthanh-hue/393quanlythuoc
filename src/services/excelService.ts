@@ -16,7 +16,7 @@ import {
   SanitaryNapkinDispatch,
   SanitaryNapkinImport,
 } from '../types';
-import { formatDateVN, formatDateTimeVN, formatDateFormulaVN, getDaysRemaining, formatTime24H } from './db';
+import { formatDateVN, formatDateTimeVN, formatDateFormulaVN, getDaysRemaining, formatTime24H, isMedicalSupplyItem } from './db';
 import { templateConfigService } from './templateConfigService';
 
 // Helper to get formatted date string for file names: YYYY_MM_DD
@@ -393,7 +393,42 @@ export function exportInOutBalanceExcel(
     '',
   ];
 
-  const ws = createReportSheet(
+  const medRowsData = rowsData.filter(
+    (r) =>
+      !isMedicalSupplyItem({
+        medicineId: r.medicineId,
+        code: r.medicineCode,
+        name: r.medicineName,
+        batchNumber: r.batchNumber,
+      })
+  );
+  const supRowsData = rowsData.filter((r) =>
+    isMedicalSupplyItem({
+      medicineId: r.medicineId,
+      code: r.medicineCode,
+      name: r.medicineName,
+      batchNumber: r.batchNumber,
+    })
+  );
+
+  const buildRows = (list: StockInOutBalanceRow[]) =>
+    list.map((r, idx) => [
+      idx + 1,
+      r.date || 'Toàn kỳ',
+      r.medicineCode,
+      r.medicineName,
+      r.batchNumber,
+      r.expDate ? formatDateVN(r.expDate) : '---',
+      r.unit,
+      r.openingStock,
+      r.importQuantity,
+      r.exportQuantity,
+      r.adjustmentQuantity || 0,
+      r.closingStock,
+      r.notes || '',
+    ]);
+
+  const wsAll = createReportSheet(
     'SỔ THEO DÕI NHẬP – XUẤT – TỒN THUỐC VÀ VẬT TƯ Y TẾ',
     filterStr,
     headers,
@@ -401,8 +436,55 @@ export function exportInOutBalanceExcel(
     summaryRow
   );
 
-  // Exact file name per requirement Section 16: So_Nhap_Xuat_Ton_YYYY_MM_DD.xlsx
-  downloadWorkbook(ws, 'Nhap_Xuat_Ton', `So_Nhap_Xuat_Ton_${getFilenameDate()}.xlsx`);
+  const wsMeds = createReportSheet(
+    'PHẦN 1: SỔ THEO DÕI NHẬP – XUẤT – TỒN THUỐC (DƯỢC PHẨM)',
+    filterStr,
+    headers,
+    buildRows(medRowsData),
+    [
+      'CỘNG THUỐC',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      medRowsData.reduce((s, r) => s + r.openingStock, 0),
+      medRowsData.reduce((s, r) => s + r.importQuantity, 0),
+      medRowsData.reduce((s, r) => s + r.exportQuantity, 0),
+      medRowsData.reduce((s, r) => s + (r.adjustmentQuantity || 0), 0),
+      medRowsData.reduce((s, r) => s + r.closingStock, 0),
+      '',
+    ]
+  );
+
+  const wsSups = createReportSheet(
+    'PHẦN 2: SỔ THEO DÕI NHẬP – XUẤT – TỒN VẬT TƯ Y TẾ',
+    filterStr,
+    headers,
+    buildRows(supRowsData),
+    [
+      'CỘNG VẬT TƯ',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      supRowsData.reduce((s, r) => s + r.openingStock, 0),
+      supRowsData.reduce((s, r) => s + r.importQuantity, 0),
+      supRowsData.reduce((s, r) => s + r.exportQuantity, 0),
+      supRowsData.reduce((s, r) => s + (r.adjustmentQuantity || 0), 0),
+      supRowsData.reduce((s, r) => s + r.closingStock, 0),
+      '',
+    ]
+  );
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, wsMeds, 'Phan1_Thuoc');
+  XLSX.utils.book_append_sheet(wb, wsSups, 'Phan2_Vat_Tu');
+  XLSX.utils.book_append_sheet(wb, wsAll, 'Tong_Hop_Chung');
+  saveWorkbook(wb, `So_Nhap_Xuat_Ton_${getFilenameDate()}.xlsx`);
 }
 
 // 7. Export Tồn theo từng lô riêng biệt (Section 8)
@@ -1063,24 +1145,45 @@ export function exportMonthlyComprehensiveReportExcel(
   );
   XLSX.utils.book_append_sheet(wb, ws1, 'Tong_Quan_Y_Te');
 
-  // Sheet 2: Danh mục thuốc & vật tư đã sử dụng
-  const s2Headers = ['STT', 'Tên thuốc / Biệt dược', 'Số lượng cấp phát', 'Đơn vị tính'];
+  // Sheet 2: Danh mục Thuốc (Dược phẩm) đã sử dụng
+  const allMeds = monthlyReport.medicinesUsed || [];
+  const pureMeds = allMeds.filter((m) => !isMedicalSupplyItem({ name: m.medicineName }));
+  const supplyItems = allMeds.filter((m) => isMedicalSupplyItem({ name: m.medicineName }));
+
+  const s2Headers = ['STT', 'Tên thuốc (Dược phẩm)', 'Số lượng cấp phát', 'Đơn vị tính'];
   let totalMedQty = 0;
-  const s2Rows = (monthlyReport.medicinesUsed || []).map((m, idx) => {
+  const s2Rows = pureMeds.map((m, idx) => {
     totalMedQty += m.quantity;
     return [idx + 1, m.medicineName, m.quantity, m.unit];
   });
-  const s2Summary = ['TỔNG CỘNG', `${monthlyReport.medicinesUsed?.length || 0} loại thuốc`, totalMedQty, ''];
+  const s2Summary = ['TỔNG CỘNG THUỐC', `${pureMeds.length} loại thuốc`, totalMedQty, ''];
   const ws2 = createReportSheet(
-    `BẢNG TỔNG HỢP THUỐC ĐÃ SỬ DỤNG - THÁNG ${selectedMonth}`,
+    `PHẦN 1: BẢNG TỔNG HỢP THUỐC ĐÃ CẤP PHÁT - THÁNG ${selectedMonth}`,
     `Cấp phát cho học sinh trong tháng ${selectedMonth}`,
     s2Headers,
     s2Rows,
     s2Summary
   );
-  XLSX.utils.book_append_sheet(wb, ws2, 'Thuoc_Su_Dung');
+  XLSX.utils.book_append_sheet(wb, ws2, 'Phan1_Thuoc_Su_Dung');
 
-  // Sheet 3: Thống kê theo từng lớp học nếu có
+  // Sheet 3: Danh mục Vật tư y tế đã xuất / tiêu hao
+  const s2SupHeaders = ['STT', 'Tên vật tư y tế', 'Số lượng xuất / tiêu hao', 'Đơn vị tính'];
+  let totalSupQty = 0;
+  const s2SupRows = supplyItems.map((s, idx) => {
+    totalSupQty += s.quantity;
+    return [idx + 1, s.medicineName, s.quantity, s.unit];
+  });
+  const s2SupSummary = ['TỔNG CỘNG VẬT TƯ', `${supplyItems.length} loại vật tư`, totalSupQty, ''];
+  const ws2Sup = createReportSheet(
+    `PHẦN 2: BẢNG TỔNG HỢP VẬT TƯ Y TẾ ĐÃ XUẤT / TIÊU HAO - THÁNG ${selectedMonth}`,
+    `Xuất và tiêu hao vật tư y tế trong tháng ${selectedMonth}`,
+    s2SupHeaders,
+    s2SupRows,
+    s2SupSummary
+  );
+  XLSX.utils.book_append_sheet(wb, ws2Sup, 'Phan2_Vat_Tu_Tieu_Hao');
+
+  // Sheet 4: Thống kê theo từng lớp học nếu có
   if (classStats && classStats.length > 0) {
     const s3Headers = ['STT', 'Lớp học', 'Số lượt học sinh khám'];
     const s3Rows = classStats.map((c, idx) => [idx + 1, c.className, c.visitCount]);

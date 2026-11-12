@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, AlertTriangle, Boxes, Plus, Calendar, CheckCircle2, ShieldAlert, Edit2 } from 'lucide-react';
-import { db, formatDateVN, getDaysRemaining } from '../services/db';
+import { Trash2, AlertTriangle, Boxes, Plus, Calendar, CheckCircle2, ShieldAlert, Edit2, Pill, Bandage } from 'lucide-react';
+import { db, formatDateVN, getDaysRemaining, isMedicalSupplyItem } from '../services/db';
 import { Medicine, MedicineBatch } from '../types';
 
 interface MedicineModalProps {
@@ -18,6 +18,7 @@ export const MedicineModal: React.FC<MedicineModalProps> = ({
 }) => {
   const suppliers = db.getSuppliers();
 
+  const [itemCategory, setItemCategory] = useState<'medicine' | 'supply'>('medicine');
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
   const [activeIngredient, setActiveIngredient] = useState('');
@@ -174,6 +175,9 @@ export const MedicineModal: React.FC<MedicineModalProps> = ({
 
   useEffect(() => {
     if (medicineToEdit) {
+      const detectedCat: 'medicine' | 'supply' =
+        medicineToEdit.itemCategory || (isMedicalSupplyItem(medicineToEdit) ? 'supply' : 'medicine');
+      setItemCategory(detectedCat);
       setCode(medicineToEdit.code);
       setName(medicineToEdit.name);
       setActiveIngredient(medicineToEdit.activeIngredient);
@@ -206,6 +210,7 @@ export const MedicineModal: React.FC<MedicineModalProps> = ({
     } else {
       // Auto-generate code
       const randNum = Math.floor(1000 + Math.random() * 9000);
+      setItemCategory('medicine');
       setCode(`TH-${randNum}`);
       setName('');
       setActiveIngredient('');
@@ -241,14 +246,14 @@ export const MedicineModal: React.FC<MedicineModalProps> = ({
     setError(null);
 
     if (!code.trim()) {
-      setError('Mã thuốc không được để trống.');
+      setError('Mã thuốc / vật tư không được để trống.');
       return;
     }
     if (!name.trim()) {
-      setError('Tên thuốc không được để trống.');
+      setError('Tên thuốc / vật tư không được để trống.');
       return;
     }
-    if (!activeIngredient.trim()) {
+    if (itemCategory === 'medicine' && !activeIngredient.trim()) {
       setError('Hoạt chất của thuốc không được để trống.');
       return;
     }
@@ -315,8 +320,11 @@ export const MedicineModal: React.FC<MedicineModalProps> = ({
           unitPrice: Number(unitPrice),
           storageLocation,
           notes,
+          itemCategory,
         });
-        onSuccess(`Đã cập nhật thông tin thuốc "${name}" thành công.`);
+        onSuccess(
+          `Đã cập nhật "${name}" (${itemCategory === 'supply' ? 'Vật tư y tế' : 'Thuốc'}) thành công.`
+        );
       } else {
         db.addMedicine(
           {
@@ -334,6 +342,7 @@ export const MedicineModal: React.FC<MedicineModalProps> = ({
             unitPrice: Number(unitPrice),
             storageLocation,
             notes,
+            itemCategory,
             isDemo: false,
           },
           createInitialBatch
@@ -350,7 +359,9 @@ export const MedicineModal: React.FC<MedicineModalProps> = ({
               }
             : undefined
         );
-        onSuccess(`Đã thêm mới thuốc "${name}" vào danh mục thành công.`);
+        onSuccess(
+          `Đã thêm mới ${itemCategory === 'supply' ? 'vật tư y tế' : 'thuốc'} "${name}" vào danh mục thành công.`
+        );
       }
       onClose();
     } catch (err: any) {
@@ -386,32 +397,112 @@ export const MedicineModal: React.FC<MedicineModalProps> = ({
             </div>
           )}
 
+          {/* Row 0: Phân loại Thuốc vs Vật tư y tế */}
+          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="block font-bold text-slate-800 text-xs">
+                Phân loại nhóm danh mục (hiển thị trên Kho & Báo cáo) <span className="text-rose-600">*</span>
+              </label>
+              <span className="text-[10px] text-slate-500">
+                Tự động tách Phần 1 (Thuốc) và Phần 2 (Vật tư) trên tất cả sổ & báo cáo
+              </span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setItemCategory('medicine');
+                  if (!medicineToEdit && code.startsWith('VT-')) {
+                    setCode(code.replace(/^VT-/, 'TH-'));
+                  }
+                }}
+                className={`flex items-center gap-2.5 p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                  itemCategory === 'medicine'
+                    ? 'bg-emerald-50 border-emerald-500 ring-2 ring-emerald-500/20 text-emerald-950'
+                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <div
+                  className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                    itemCategory === 'medicine'
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-slate-100 text-slate-500'
+                  }`}
+                >
+                  <Pill className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="font-bold text-xs">Thuốc (Dược phẩm)</div>
+                  <div className="text-[10px] opacity-80">
+                    Thuốc uống, nhỏ mắt, sát khuẩn, điều trị (Phần 1 báo cáo)
+                  </div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setItemCategory('supply');
+                  if (!medicineToEdit) {
+                    if (code.startsWith('TH-')) {
+                      setCode(code.replace(/^TH-/, 'VT-'));
+                    }
+                    if (dosageForm === 'Viên nén') {
+                      setDosageForm('Vật tư tiêu hao');
+                    }
+                  }
+                }}
+                className={`flex items-center gap-2.5 p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                  itemCategory === 'supply'
+                    ? 'bg-[#EAF5F4] border-[#147D80] ring-2 ring-[#147D80]/20 text-[#17324D]'
+                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <div
+                  className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                    itemCategory === 'supply'
+                      ? 'bg-[#17324D] text-white'
+                      : 'bg-slate-100 text-slate-500'
+                  }`}
+                >
+                  <Bandage className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="font-bold text-xs">Vật tư y tế (Vật tư tiêu hao)</div>
+                  <div className="text-[10px] opacity-80">
+                    Bông, băng, gạc, cồn, vật tư sơ cứu (Phần 2 báo cáo)
+                  </div>
+                </div>
+              </button>
+            </div>
+          </div>
+
           {/* Row 1: Code & Name */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block font-bold text-slate-700 mb-1">
-                Mã thuốc <span className="text-rose-600">*</span>
+                {itemCategory === 'supply' ? 'Mã vật tư' : 'Mã thuốc'} <span className="text-rose-600">*</span>
               </label>
               <input
                 id="input-med-code"
                 type="text"
                 value={code}
                 onChange={(e) => setCode(e.target.value.toUpperCase())}
-                placeholder="VD: TH-PARA500"
+                placeholder={itemCategory === 'supply' ? 'VD: VT-BANGTHUN' : 'VD: TH-PARA500'}
                 required
                 className="w-full p-2 rounded-xl border border-slate-200 font-mono font-bold focus:ring-2 focus:ring-emerald-500"
               />
             </div>
             <div className="sm:col-span-2">
               <label className="block font-bold text-slate-700 mb-1">
-                Tên thuốc biệt dược <span className="text-rose-600">*</span>
+                {itemCategory === 'supply' ? 'Tên vật tư y tế' : 'Tên thuốc biệt dược'} <span className="text-rose-600">*</span>
               </label>
               <input
                 id="input-med-name"
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="VD: Paracetamol 500mg (Hapacol)"
+                placeholder={itemCategory === 'supply' ? 'VD: Băng thun 2 móc / Gạc tiệt trùng' : 'VD: Paracetamol 500mg (Hapacol)'}
                 required
                 className="w-full p-2 rounded-xl border border-slate-200 font-bold focus:ring-2 focus:ring-emerald-500"
               />
@@ -422,26 +513,27 @@ export const MedicineModal: React.FC<MedicineModalProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block font-bold text-slate-700 mb-1">
-                Hoạt chất chính <span className="text-rose-600">*</span>
+                {itemCategory === 'supply' ? 'Thành phần / Mô tả vật tư' : 'Hoạt chất chính'}{' '}
+                {itemCategory === 'medicine' && <span className="text-rose-600">*</span>}
               </label>
               <input
                 id="input-med-active"
                 type="text"
                 value={activeIngredient}
                 onChange={(e) => setActiveIngredient(e.target.value)}
-                placeholder="VD: Paracetamol"
-                required
+                placeholder={itemCategory === 'supply' ? 'VD: Sợi cotton y tế / Không bắt buộc' : 'VD: Paracetamol'}
+                required={itemCategory === 'medicine'}
                 className="w-full p-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500"
               />
             </div>
             <div>
-              <label className="block font-bold text-slate-700 mb-1">Hàm lượng / Nồng độ</label>
+              <label className="block font-bold text-slate-700 mb-1">Hàm lượng / Kích thước</label>
               <input
                 id="input-med-strength"
                 type="text"
                 value={strength}
                 onChange={(e) => setStrength(e.target.value)}
-                placeholder="VD: 500mg hoặc 10%"
+                placeholder={itemCategory === 'supply' ? 'VD: 10cm x 10cm, 50g...' : 'VD: 500mg hoặc 10%'}
                 className="w-full p-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500"
               />
             </div>
@@ -450,7 +542,7 @@ export const MedicineModal: React.FC<MedicineModalProps> = ({
           {/* Row 3: Dosage form, Unit, Packing */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="block font-bold text-slate-700 mb-1">Dạng bào chế</label>
+              <label className="block font-bold text-slate-700 mb-1">Dạng bào chế / Phân loại</label>
               <select
                 id="input-med-form"
                 value={dosageForm}
@@ -466,6 +558,8 @@ export const MedicineModal: React.FC<MedicineModalProps> = ({
                 <option value="Dung dịch nhỏ mắt mũi">Dung dịch nhỏ mắt mũi</option>
                 <option value="Siro thuốc">Siro thuốc</option>
                 <option value="Dầu xoa ngoài da">Dầu xoa ngoài da</option>
+                <option value="Vật tư tiêu hao">Vật tư tiêu hao</option>
+                <option value="Vật tư y tế">Vật tư y tế</option>
                 <option value="Dạng khác">Dạng khác</option>
               </select>
             </div>

@@ -13,6 +13,7 @@ import {
   Users,
   AlertTriangle,
   FileText,
+  BriefcaseMedical,
 } from 'lucide-react';
 import { db, formatDateVN, getCurrentDateISO } from '../services/db';
 import { exportMonthlyComprehensiveReportExcel } from '../services/excelService';
@@ -37,6 +38,22 @@ export const ComprehensiveReports: React.FC = () => {
     });
     return () => unsub();
   }, []);
+
+  const availableMonths = useMemo(() => {
+    const monthSet = new Set<string>();
+    monthSet.add(getCurrentDateISO().substring(0, 7));
+    for (const v of db.getClinicVisits()) {
+      if (v.visitDate && v.visitDate.length >= 7) {
+        monthSet.add(v.visitDate.substring(0, 7));
+      }
+    }
+    for (const tx of db.getTransactions('export')) {
+      if (tx.status !== 'cancelled' && tx.date && tx.date.length >= 7) {
+        monthSet.add(tx.date.substring(0, 7));
+      }
+    }
+    return Array.from(monthSet).sort((a, b) => b.localeCompare(a));
+  }, [dbTick]);
 
   const monthlyReport = useMemo(() => {
     return db.getMonthlyClinicReport(selectedMonth);
@@ -129,21 +146,24 @@ export const ComprehensiveReports: React.FC = () => {
             </tbody>
           </table>
 
-          <p style="margin-top: 12pt;"><strong>III. THUỐC VÀ VẬT TƯ ĐÃ XUẤT SỬ DỤNG:</strong></p>
+          <p style="margin-top: 12pt;"><strong>III.1. TỔNG HỢP THUỐC ĐÃ XUẤT CẤP PHÁT TRONG THÁNG:</strong></p>
           <table class="data-table">
             <thead>
               <tr>
                 <th style="width: 40px;">STT</th>
-                <th>Tên thuốc / Vật tư</th>
+                <th>Tên thuốc / Biệt dược</th>
                 <th style="width: 90px;">Số lô</th>
                 <th style="width: 80px;">Số lượng</th>
                 <th style="width: 60px;">ĐVT</th>
               </tr>
             </thead>
             <tbody>
-              ${monthlyReport.medicinesUsedSummary
-                .map(
-                  (m, idx) => `
+              ${
+                monthlyReport.medicinesOnlySummary.length === 0
+                  ? '<tr><td colspan="5" class="text-center">Chưa có thuốc xuất cấp phát trong tháng này.</td></tr>'
+                  : monthlyReport.medicinesOnlySummary
+                      .map(
+                        (m, idx) => `
                 <tr>
                   <td class="text-center">${idx + 1}</td>
                   <td><strong>${m.medicineName}</strong></td>
@@ -152,8 +172,41 @@ export const ComprehensiveReports: React.FC = () => {
                   <td class="text-center">${m.unit}</td>
                 </tr>
               `
-                )
-                .join('')}
+                      )
+                      .join('')
+              }
+            </tbody>
+          </table>
+
+          <p style="margin-top: 12pt;"><strong>III.2. TỔNG HỢP VẬT TƯ Y TẾ ĐÃ XUẤT / TIÊU HAO TRONG THÁNG:</strong></p>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th style="width: 40px;">STT</th>
+                <th>Tên vật tư y tế</th>
+                <th style="width: 90px;">Số lô / Kho</th>
+                <th style="width: 80px;">Số lượng</th>
+                <th style="width: 60px;">ĐVT</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${
+                monthlyReport.suppliesBatchSummary.length === 0
+                  ? '<tr><td colspan="5" class="text-center">Chưa có vật tư y tế tiêu hao trong tháng này.</td></tr>'
+                  : monthlyReport.suppliesBatchSummary
+                      .map(
+                        (s, idx) => `
+                <tr>
+                  <td class="text-center">${idx + 1}</td>
+                  <td><strong>${s.supplyName}</strong></td>
+                  <td class="text-center font-mono">${s.batchNumber}</td>
+                  <td class="text-center font-bold">${s.quantity}</td>
+                  <td class="text-center">${s.unit}</td>
+                </tr>
+              `
+                      )
+                      .join('')
+              }
             </tbody>
           </table>
         </div>
@@ -216,14 +269,32 @@ export const ComprehensiveReports: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
-          <div className="flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
+          <div className="flex flex-wrap items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
             <span className="text-xs font-semibold text-slate-600">Chọn tháng:</span>
             <input
               type="month"
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}
-              className="text-xs font-bold text-slate-800 bg-transparent border-0 focus:ring-0 p-0"
+              className="text-xs font-bold text-slate-800 bg-transparent border-0 focus:ring-0 p-0 cursor-pointer"
             />
+            {availableMonths.length > 1 && (
+              <div className="flex items-center gap-1 ml-1 pl-2 border-l border-slate-200">
+                {availableMonths.slice(0, 4).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setSelectedMonth(m)}
+                    className={`px-2 py-0.5 rounded text-[11px] font-bold transition-colors cursor-pointer ${
+                      selectedMonth === m
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-white text-slate-600 hover:bg-slate-200 border border-slate-200'
+                    }`}
+                  >
+                    {m.split('-')[1]}/{m.split('-')[0]}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <button
@@ -286,60 +357,60 @@ export const ComprehensiveReports: React.FC = () => {
       {reportType === 'monthly' ? (
         <div className="space-y-6">
           {/* Key Metrics */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-              <p className="text-xs font-medium text-slate-500">Tổng số lượt khám</p>
-              <p className="text-2xl font-bold text-indigo-800 mt-1">{monthlyReport.totalVisits}</p>
-              <p className="text-[10px] text-slate-400 mt-0.5">Trong tháng {selectedMonth}</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+            <div className="bg-white p-4 rounded-xl border border-[#E2E8F0]">
+              <p className="text-xs font-medium text-[#64748B]">Tổng số lượt khám</p>
+              <p className="text-2xl font-bold text-[#17324D] mt-1 tabular-nums">{monthlyReport.totalVisits}</p>
+              <p className="text-[11px] text-[#64748B] mt-0.5">Trong tháng {selectedMonth}</p>
             </div>
 
-            <div className="bg-emerald-50/80 p-4 rounded-xl border border-emerald-200 shadow-xs">
-              <p className="text-xs font-bold text-emerald-800">Đã ổn định về lớp</p>
-              <p className="text-2xl font-bold text-emerald-900 mt-1">
+            <div className="bg-[#F0FDF4] p-4 rounded-xl border border-[#BBF7D0]">
+              <p className="text-xs font-semibold text-[#15803D]">Đã ổn định về lớp</p>
+              <p className="text-2xl font-bold text-[#15803D] mt-1 tabular-nums">
                 {monthlyReport.outcomes['Đã ổn định cho về lớp'] || 0}
               </p>
-              <p className="text-[10px] text-emerald-700 mt-0.5">Xử trí sơ cứu thành công</p>
+              <p className="text-[11px] text-[#15803D] mt-0.5">Xử trí sơ cứu thành công</p>
             </div>
 
-            <div className="bg-amber-50/80 p-4 rounded-xl border border-amber-200 shadow-xs">
-              <p className="text-xs font-bold text-amber-800">Phụ huynh đón về</p>
-              <p className="text-2xl font-bold text-amber-900 mt-1">
+            <div className="bg-[#FFFBEB] p-4 rounded-xl border border-[#FDE68A]">
+              <p className="text-xs font-semibold text-[#B45309]">Phụ huynh đón về</p>
+              <p className="text-2xl font-bold text-[#B45309] mt-1 tabular-nums">
                 {monthlyReport.outcomes['Bàn giao phụ huynh đón về'] || 0}
               </p>
-              <p className="text-[10px] text-amber-700 mt-0.5">Cần nghỉ ngơi tại nhà</p>
+              <p className="text-[11px] text-[#B45309] mt-0.5">Cần nghỉ ngơi tại nhà</p>
             </div>
 
-            <div className="bg-rose-50/80 p-4 rounded-xl border border-rose-200 shadow-xs">
-              <p className="text-xs font-bold text-rose-800">Chuyển viện / Tai nạn</p>
-              <p className="text-2xl font-bold text-rose-900 mt-1">
+            <div className="bg-white p-4 rounded-xl border border-[#E2E8F0]">
+              <p className="text-xs font-medium text-[#64748B]">Chuyển viện / Tai nạn</p>
+              <p className="text-2xl font-bold text-[#17324D] mt-1 tabular-nums">
                 {(monthlyReport.outcomes['Chuyển cơ sở y tế tuyến trên'] || 0) + monthlyReport.healthEventsCount}
               </p>
-              <p className="text-[10px] text-rose-700 mt-0.5">Chuyển BV Hóc Môn / Sự cố</p>
+              <p className="text-[11px] text-[#64748B] mt-0.5">Chuyển tuyến trên / Sự cố</p>
             </div>
           </div>
 
           {/* Breakdown by Reason & Medicines Used */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Reasons breakdown */}
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-              <h3 className="font-bold text-sm text-slate-900">Cơ Cấu Lý Do Đến Phòng Y Tế</h3>
+            <div className="bg-white p-5 rounded-xl border border-[#E2E8F0] space-y-4">
+              <h3 className="font-bold text-sm text-[#17324D]">Cơ Cấu Lý Do Đến Phòng Y Tế</h3>
               <div className="space-y-2.5">
                 {Object.entries(monthlyReport.byReason).length === 0 ? (
-                  <p className="text-xs text-slate-400 py-6 text-center">Không có ca khám trong tháng này.</p>
+                  <p className="text-xs text-[#64748B] py-6 text-center">Không có ca khám trong tháng này.</p>
                 ) : (
                   Object.entries(monthlyReport.byReason).map(([reason, count]) => {
                     const numCount = Number(count);
                     const pct = Math.round((numCount / (monthlyReport.totalVisits || 1)) * 100);
                     return (
                       <div key={reason} className="space-y-1">
-                        <div className="flex justify-between text-xs font-semibold">
-                          <span className="text-slate-700">{reason}</span>
-                          <span className="text-slate-900">
+                        <div className="flex justify-between text-xs font-medium">
+                          <span className="text-[#1E293B]">{reason}</span>
+                          <span className="text-[#17324D] font-semibold tabular-nums">
                             {numCount} lượt ({pct}%)
                           </span>
                         </div>
-                        <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                          <div className="bg-indigo-600 h-2 rounded-full" style={{ width: `${pct}%` }} />
+                        <div className="w-full bg-[#F5F7FA] h-2 rounded-full overflow-hidden">
+                          <div className="bg-[#147D80] h-2 rounded-full" style={{ width: `${pct}%` }} />
                         </div>
                       </div>
                     );
@@ -348,75 +419,164 @@ export const ComprehensiveReports: React.FC = () => {
               </div>
             </div>
 
-            {/* Medicines Dispensed */}
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-              <h3 className="font-bold text-sm text-slate-900">Tổng Hợp Thuốc Đã Cấp Phát</h3>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-50 text-slate-600 border-b border-slate-200 uppercase font-bold text-[10px]">
-                    <tr>
-                      <th className="py-2 px-3">Tên thuốc</th>
-                      <th className="py-2 px-3 text-right">Tổng số lượng</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {monthlyReport.medicinesUsed.length === 0 ? (
+            {/* Separated Sections: 1. Thuốc (Dược phẩm) & 2. Vật tư y tế tiêu hao */}
+            <div className="space-y-5">
+              {/* Phần 1: Thuốc đã xuất cấp phát */}
+              <div className="bg-white rounded-xl border border-[#E2E8F0] overflow-hidden">
+                <div className="px-5 py-3.5 bg-[#F5F7FA] border-b border-[#E2E8F0] flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-[#EAF5F4] text-[#147D80] flex items-center justify-center shrink-0">
+                      <Pill className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-sm text-[#17324D]">
+                        1. Tổng Hợp Thuốc Đã Xuất Cấp Phát
+                      </h3>
+                      <p className="text-[11px] text-[#64748B]">
+                        Dược phẩm điều trị & sơ cứu học sinh theo lô FEFO
+                      </p>
+                    </div>
+                  </div>
+                  <span className="px-2.5 py-1 rounded text-[11px] font-semibold bg-[#EAF5F4] text-[#147D80] border border-[#B2D8D6] tabular-nums shrink-0">
+                    {monthlyReport.medicinesOnlySummary.length} lô thuốc •{' '}
+                    {monthlyReport.medicinesOnlySummary.reduce((sum, m) => sum + m.quantity, 0)} ĐV
+                  </span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-[#F5F7FA] text-[#64748B] border-b border-[#E2E8F0] uppercase font-semibold text-[11px]">
                       <tr>
-                        <td colSpan={2} className="py-6 text-center text-slate-400">
-                          Chưa cấp thuốc trong tháng này.
-                        </td>
+                        <th className="py-2.5 px-3 w-10 text-center">STT</th>
+                        <th className="py-2.5 px-3">Tên thuốc / Biệt dược</th>
+                        <th className="py-2.5 px-3 text-center">Số lô</th>
+                        <th className="py-2.5 px-3 text-right">Tổng số lượng</th>
                       </tr>
-                    ) : (
-                      monthlyReport.medicinesUsed.map((m, idx) => (
-                        <tr key={idx} className="hover:bg-slate-50">
-                          <td className="py-2.5 px-3 font-semibold text-slate-800">{m.medicineName}</td>
-                          <td className="py-2.5 px-3 text-right font-bold text-emerald-700">
-                            {m.quantity} {m.unit}
+                    </thead>
+                    <tbody className="divide-y divide-[#E2E8F0]">
+                      {monthlyReport.medicinesOnlySummary.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} className="py-6 text-center text-[#64748B]">
+                            Chưa có thuốc xuất cấp phát trong tháng này.
                           </td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+                      ) : (
+                        monthlyReport.medicinesOnlySummary.map((m, idx) => (
+                          <tr key={`${m.medicineName}-${m.batchNumber}-${idx}`} className="hover:bg-[#F5F7FA] transition-colors">
+                            <td className="py-2.5 px-3 text-center text-[#64748B] tabular-nums">{idx + 1}</td>
+                            <td className="py-2.5 px-3 font-semibold text-[#1E293B]">{m.medicineName}</td>
+                            <td className="py-2.5 px-3 text-center font-mono text-[#64748B] tabular-nums">
+                              <span className="px-1.5 py-0.5 bg-[#F5F7FA] rounded border border-[#E2E8F0] text-[11px]">
+                                {m.batchNumber || '—'}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-bold text-[#147D80] tabular-nums">
+                              {m.quantity} <span className="font-medium text-[#64748B]">{m.unit}</span>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Phần 2: Vật tư y tế đã xuất / tiêu hao */}
+              <div className="bg-white rounded-xl border border-[#E2E8F0] overflow-hidden">
+                <div className="px-5 py-3.5 bg-[#F5F7FA] border-b border-[#E2E8F0] flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-[#EFF6FF] text-[#1D4ED8] flex items-center justify-center shrink-0">
+                      <BriefcaseMedical className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-sm text-[#17324D]">
+                        2. Tổng Hợp Vật Tư Y Tế Đã Xuất / Tiêu Hao
+                      </h3>
+                      <p className="text-[11px] text-[#64748B]">
+                        Bông, băng, gạc và vật tư sơ cứu tiêu hao tại Phòng Y tế
+                      </p>
+                    </div>
+                  </div>
+                  <span className="px-2.5 py-1 rounded text-[11px] font-semibold bg-[#EFF6FF] text-[#1D4ED8] border border-[#BFDBFE] tabular-nums shrink-0">
+                    {monthlyReport.suppliesBatchSummary.length} loại vật tư •{' '}
+                    {monthlyReport.suppliesBatchSummary.reduce((sum, s) => sum + s.quantity, 0)} ĐV
+                  </span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-[#F5F7FA] text-[#64748B] border-b border-[#E2E8F0] uppercase font-semibold text-[11px]">
+                      <tr>
+                        <th className="py-2.5 px-3 w-10 text-center">STT</th>
+                        <th className="py-2.5 px-3">Tên vật tư y tế</th>
+                        <th className="py-2.5 px-3 text-center">Số lô / Kho</th>
+                        <th className="py-2.5 px-3 text-right">Tổng số lượng</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#E2E8F0]">
+                      {monthlyReport.suppliesBatchSummary.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} className="py-6 text-center text-[#64748B]">
+                            Chưa có vật tư y tế tiêu hao trong tháng này.
+                          </td>
+                        </tr>
+                      ) : (
+                        monthlyReport.suppliesBatchSummary.map((s, idx) => (
+                          <tr key={`${s.supplyName}-${s.batchNumber}-${idx}`} className="hover:bg-[#F5F7FA] transition-colors">
+                            <td className="py-2.5 px-3 text-center text-[#64748B] tabular-nums">{idx + 1}</td>
+                            <td className="py-2.5 px-3 font-semibold text-[#1E293B]">{s.supplyName}</td>
+                            <td className="py-2.5 px-3 text-center font-mono text-[#64748B] tabular-nums">
+                              <span className="px-1.5 py-0.5 bg-[#F5F7FA] rounded border border-[#E2E8F0] text-[11px]">
+                                {s.batchNumber || 'KHO-VT'}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-bold text-[#17324D] tabular-nums">
+                              {s.quantity} <span className="font-medium text-[#64748B]">{s.unit}</span>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </div>
         </div>
       ) : (
         /* Breakdown by Class */
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-          <div className="p-4 bg-slate-50 border-b border-slate-200">
-            <h3 className="font-bold text-xs uppercase text-slate-700">
+        <div className="bg-white rounded-xl border border-[#E2E8F0] overflow-hidden">
+          <div className="p-4 bg-[#F5F7FA] border-b border-[#E2E8F0]">
+            <h3 className="font-bold text-xs uppercase text-[#17324D]">
               Thống Kê Lượt Khám Phân Bổ Theo Lớp (Tháng {selectedMonth})
             </h3>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="bg-white text-slate-600 border-b border-slate-200 uppercase font-bold text-[10px]">
+              <thead className="bg-white text-[#64748B] border-b border-[#E2E8F0] uppercase font-semibold text-[11px]">
                 <tr>
                   <th className="py-3 px-4">Lớp</th>
                   <th className="py-3 px-4">Khối</th>
-                  <th className="py-3 px-4 text-center">Số lượt vào phòng y tế</th>
+                  <th className="py-3 px-4 text-right">Số lượt vào phòng y tế</th>
                   <th className="py-3 px-4">Các lý do chính</th>
                   <th className="py-3 px-4">Đánh giá nguy cơ</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-[#E2E8F0]">
                 {classStats.map((item) => (
-                  <tr key={item.className} className="hover:bg-slate-50">
-                    <td className="py-3 px-4 font-bold text-slate-900">{item.className}</td>
-                    <td className="py-3 px-4 text-slate-600">Khối {item.grade}</td>
-                    <td className="py-3 px-4 text-center font-bold text-indigo-800 text-sm">{item.visitCount}</td>
-                    <td className="py-3 px-4 text-slate-600">
+                  <tr key={item.className} className="hover:bg-[#F5F7FA]">
+                    <td className="py-3 px-4 font-bold text-[#17324D]">{item.className}</td>
+                    <td className="py-3 px-4 text-[#64748B]">Khối {item.grade}</td>
+                    <td className="py-3 px-4 text-right font-bold text-[#17324D] text-sm tabular-nums">{item.visitCount}</td>
+                    <td className="py-3 px-4 text-[#64748B]">
                       {item.topReasons.length > 0 ? item.topReasons.join(', ') : '—'}
                     </td>
                     <td className="py-3 px-4">
                       {item.visitCount >= 4 ? (
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">
-                          ⚠️ Cần lưu ý theo dõi lớp
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-[#FFFBEB] text-[#B45309] border border-[#FDE68A]">
+                          <AlertTriangle className="w-3 h-3" />
+                          <span>Cần lưu ý theo dõi lớp</span>
                         </span>
                       ) : (
-                        <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600">
+                        <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-[#F0FDF4] text-[#15803D] border border-[#BBF7D0]">
                           Bình thường
                         </span>
                       )}

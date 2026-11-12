@@ -24,7 +24,6 @@ import { StudentHealthProfileView } from './components/StudentHealthProfileView'
 import { ClinicReception } from './components/ClinicReception';
 import { StaffMedicineDispense } from './components/StaffMedicineDispense';
 import { ClinicVisitsLog } from './components/ClinicVisitsLog';
-import { SchoolHealthAndCheckups } from './components/SchoolHealthAndCheckups';
 import { ComprehensiveReports } from './components/ComprehensiveReports';
 import { MedicationUsageReport } from './components/MedicationUsageReport';
 import { SupplyUsageReport } from './components/SupplyUsageReport';
@@ -239,8 +238,8 @@ export default function App() {
 
   if (isAuthenticated === null) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="w-10 h-10 border-4 border-slate-200 border-t-emerald-600 rounded-full animate-spin"></div>
+      <div className="min-h-screen flex items-center justify-center bg-[#F5F7FA]">
+        <div className="w-10 h-10 border-4 border-[#E2E8F0] border-t-[#147D80] rounded-full animate-spin"></div>
       </div>
     );
   }
@@ -250,7 +249,7 @@ export default function App() {
   }
 
   return (
-    <div className="h-screen h-[100dvh] max-h-screen bg-slate-50 text-slate-900 flex flex-col antialiased overflow-hidden">
+    <div className="h-screen h-[100dvh] max-h-screen bg-[#F5F7FA] text-[#1E293B] flex flex-col antialiased overflow-hidden">
       {/* Top Header */}
       <Header
         currentUser={db.getCurrentUser()}
@@ -283,16 +282,16 @@ export default function App() {
         />
 
         {/* Main Content Area */}
-        <main id="main-content-scrollable" className="flex-1 min-h-0 overflow-y-auto bg-slate-50 overscroll-contain">
+        <main id="main-content-scrollable" className="flex-1 min-h-0 overflow-y-auto bg-[#F5F7FA] overscroll-contain">
           <ErrorBoundary>
             <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full">
               {/* Toast Notification Alert */}
               {toast && (
                 <div
                   id="app-toast-alert"
-                  className="fixed top-20 right-6 z-50 bg-emerald-800 text-white px-5 py-3.5 rounded-2xl shadow-xl flex items-center gap-3 border border-emerald-700 animate-in fade-in slide-in-from-top-4 duration-200 text-xs sm:text-sm font-semibold max-w-md"
+                  className="fixed top-20 right-6 z-50 bg-[#F0FDF4] text-[#15803D] px-5 py-3.5 rounded-xl shadow-md flex items-center gap-3 border border-[#BBF7D0] animate-in fade-in slide-in-from-top-4 duration-200 text-xs sm:text-sm font-semibold max-w-md"
                 >
-                  <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-300" />
+                  <CheckCircle2 className="w-5 h-5 shrink-0 text-[#15803D]" />
                   <span>{toast.message}</span>
                 </div>
               )}
@@ -358,9 +357,6 @@ export default function App() {
               }}
             />
           )}
-
-          {/* TAB 5: Sự kiện tai nạn & Khám sức khỏe định kỳ (Giai đoạn 3) */}
-          {activeTab === 'school_health' && db.canAccessTab('school_health') && <SchoolHealthAndCheckups />}
 
           {/* TAB 6: Danh mục thuốc (Giai đoạn 1 & 2) */}
           {activeTab === 'medicines' && db.canAccessTab('medicines') && (
@@ -449,11 +445,18 @@ export default function App() {
 
       {/* Modal: Hồ Sơ Sức Khỏe Học Sinh Toàn Diện */}
       {selectedStudentForProfileId && (
-        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-3 sm:p-6 backdrop-blur-xs">
-          <div className="bg-slate-50 rounded-2xl max-w-5xl w-full max-h-[92vh] overflow-y-auto border border-slate-200 shadow-2xl p-4 sm:p-6">
+        <div
+          className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-3 sm:p-6 backdrop-blur-xs"
+          onClick={() => setSelectedStudentForProfileId(null)}
+        >
+          <div
+            className="bg-slate-50 rounded-2xl max-w-5xl w-full max-h-[92vh] overflow-y-auto border border-slate-200 shadow-2xl p-4 sm:p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
             <StudentHealthProfileView
               studentId={selectedStudentForProfileId}
               onClose={() => setSelectedStudentForProfileId(null)}
+              onBack={() => setSelectedStudentForProfileId(null)}
               onNewVisit={(stu) => {
                 setSelectedStudentForProfileId(null);
                 setSelectedStudentForIntake(stu);

@@ -666,8 +666,9 @@ export const ImportMedicine: React.FC<ImportMedicineProps> = ({
                           {/* Medicine details / Status & Unit selection */}
                           <div className="flex items-center justify-between gap-1.5 mt-1 text-[11px]">
                             {row.isNewMedicine ? (
-                              <span className="inline-flex items-center gap-1 text-blue-700 font-bold bg-blue-100/80 px-1.5 py-0.5 rounded text-[10px]">
-                                ✨ Thuốc mới (sẽ tự thêm vào danh mục)
+                              <span className="inline-flex items-center gap-1 text-[#1D4ED8] font-bold bg-[#EFF6FF] border border-[#BFDBFE] px-1.5 py-0.5 rounded text-[10px]">
+                                <Plus className="w-3 h-3 shrink-0" />
+                                <span>Thuốc mới (sẽ tự thêm vào danh mục)</span>
                               </span>
                             ) : row.medicineId ? (
                               <span className="text-emerald-700 font-medium text-[10px] truncate max-w-[170px]" title={`${selectedMed?.code} • ${selectedMed?.activeIngredient || ''}`}>
