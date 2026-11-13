@@ -50,6 +50,8 @@ import {
   STAFF_DEPARTMENTS,
   STAFF_CLINIC_REASONS,
   STAFF_CLINIC_OUTCOMES,
+  getAllDepartments,
+  addCustomDepartment,
 } from '../services/staffData';
 import { SchoolStaff, Medicine, MedicalSupply, ClinicVisit } from '../types';
 import {
@@ -149,12 +151,30 @@ export const StaffMedicineDispense: React.FC<StaffMedicineDispenseProps> = ({
   const [editingStaff, setEditingStaff] = useState<SchoolStaff | null>(null);
   const [deleteConfirmStaff, setDeleteConfirmStaff] = useState<SchoolStaff | null>(null);
 
+  const allDepartments = useMemo(
+    () => getAllDepartments(allStaff.map((s) => s.department)),
+    [allStaff, dbTick]
+  );
+
+  const [isAddingNewDept, setIsAddingNewDept] = useState(false);
+  const [newDeptInput, setNewDeptInput] = useState('');
+
+  const handleConfirmAddNewDept = () => {
+    const clean = newDeptInput.trim();
+    if (!clean) return;
+    addCustomDepartment(clean);
+    setDbTick((t) => t + 1);
+    setStaffFormDept(clean);
+    setNewDeptInput('');
+    setIsAddingNewDept(false);
+  };
+
   // Staff Form state
   const [staffFormCode, setStaffFormCode] = useState('');
   const [staffFormFullName, setStaffFormFullName] = useState('');
   const [staffFormGender, setStaffFormGender] = useState<'Nam' | 'Nữ'>('Nữ');
   const [staffFormBirthYear, setStaffFormBirthYear] = useState<number | ''>(1985);
-  const [staffFormDept, setStaffFormDept] = useState<string>(STAFF_DEPARTMENTS[1]);
+  const [staffFormDept, setStaffFormDept] = useState<string>(() => getAllDepartments()[1] || 'Tổ Toán - Tin');
   const [staffFormPosition, setStaffFormPosition] = useState('Giáo viên');
   const [staffFormPhone, setStaffFormPhone] = useState('');
   const [staffFormBaselineBP, setStaffFormBaselineBP] = useState('120/80');
@@ -261,7 +281,7 @@ export const StaffMedicineDispense: React.FC<StaffMedicineDispenseProps> = ({
 
   // Quick staff modal state
   const [newStaffName, setNewStaffName] = useState('');
-  const [newStaffDept, setNewStaffDept] = useState<string>(STAFF_DEPARTMENTS[1]);
+  const [newStaffDept, setNewStaffDept] = useState<string>(() => allDepartments[1] || 'Tổ Toán - Tin');
   const [newStaffPosition, setNewStaffPosition] = useState('Giáo viên');
   const [newStaffGender, setNewStaffGender] = useState<'Nam' | 'Nữ'>('Nữ');
   const [newStaffPhone, setNewStaffPhone] = useState('');
@@ -274,7 +294,7 @@ export const StaffMedicineDispense: React.FC<StaffMedicineDispenseProps> = ({
     setStaffFormFullName('');
     setStaffFormGender('Nữ');
     setStaffFormBirthYear(1985);
-    setStaffFormDept(STAFF_DEPARTMENTS[1]);
+    setStaffFormDept(allDepartments[1] || 'Tổ Toán - Tin');
     setStaffFormPosition('Giáo viên');
     setStaffFormPhone('');
     setStaffFormBaselineBP('120/80');
@@ -295,7 +315,7 @@ export const StaffMedicineDispense: React.FC<StaffMedicineDispenseProps> = ({
     setStaffFormFullName(staff.fullName || '');
     setStaffFormGender(staff.gender || 'Nữ');
     setStaffFormBirthYear(staff.birthYear || '');
-    setStaffFormDept(staff.department || STAFF_DEPARTMENTS[1]);
+    setStaffFormDept(staff.department || allDepartments[1] || 'Tổ Toán - Tin');
     setStaffFormPosition(staff.position || 'Giáo viên');
     setStaffFormPhone(staff.phone || '');
     setStaffFormBaselineBP(staff.bloodPressureBaseline || '120/80');
@@ -959,7 +979,7 @@ export const StaffMedicineDispense: React.FC<StaffMedicineDispenseProps> = ({
                   className="w-full py-2 px-3 border border-slate-200 rounded-xl bg-white font-medium text-xs focus:ring-2 focus:ring-teal-500"
                 >
                   <option value="all">Tất cả tổ / bộ phận ({allStaff.length})</option>
-                  {STAFF_DEPARTMENTS.map((dept) => (
+                  {allDepartments.map((dept) => (
                     <option key={dept} value={dept}>
                       {dept}
                     </option>
@@ -2081,7 +2101,7 @@ export const StaffMedicineDispense: React.FC<StaffMedicineDispenseProps> = ({
                 className="p-2 border border-slate-200 rounded-xl bg-white font-medium text-xs focus:ring-2 focus:ring-teal-500"
               >
                 <option value="all">Tất cả tổ / phòng ban ({allStaff.length})</option>
-                {STAFF_DEPARTMENTS.map((dept) => (
+                {allDepartments.map((dept) => (
                   <option key={dept} value={dept}>
                     {dept}
                   </option>
@@ -2474,18 +2494,76 @@ export const StaffMedicineDispense: React.FC<StaffMedicineDispenseProps> = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Tổ bộ môn / Phòng ban</label>
-                  <select
-                    value={staffFormDept}
-                    onChange={(e) => setStaffFormDept(e.target.value)}
-                    className="w-full p-2.5 border border-slate-200 rounded-xl font-medium text-xs bg-white focus:ring-2 focus:ring-teal-500"
-                  >
-                    {STAFF_DEPARTMENTS.map((dept) => (
-                      <option key={dept} value={dept}>
-                        {dept}
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-bold text-slate-700">Tổ bộ môn / Phòng ban</label>
+                    {!isAddingNewDept && (
+                      <button
+                        type="button"
+                        onClick={() => setIsAddingNewDept(true)}
+                        className="text-[11px] font-bold text-teal-700 hover:text-teal-800 hover:underline cursor-pointer flex items-center gap-1"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>Thêm tổ mới</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {isAddingNewDept ? (
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="text"
+                        autoFocus
+                        value={newDeptInput}
+                        onChange={(e) => setNewDeptInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleConfirmAddNewDept();
+                          }
+                        }}
+                        placeholder="Nhập tên tổ mới..."
+                        className="flex-1 p-2 border border-teal-500 rounded-xl font-medium text-xs bg-teal-50/40 focus:ring-2 focus:ring-teal-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleConfirmAddNewDept}
+                        className="px-3 py-2 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded-xl text-xs shrink-0 cursor-pointer"
+                      >
+                        Lưu
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsAddingNewDept(false);
+                          setNewDeptInput('');
+                        }}
+                        className="px-2.5 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-xl text-xs shrink-0 cursor-pointer"
+                      >
+                        Hủy
+                      </button>
+                    </div>
+                  ) : (
+                    <select
+                      value={staffFormDept}
+                      onChange={(e) => {
+                        if (e.target.value === '__add_new__') {
+                          setIsAddingNewDept(true);
+                        } else {
+                          setStaffFormDept(e.target.value);
+                        }
+                      }}
+                      className="w-full p-2.5 border border-slate-200 rounded-xl font-medium text-xs bg-white focus:ring-2 focus:ring-teal-500"
+                    >
+                      {allDepartments.map((dept) => (
+                        <option key={dept} value={dept}>
+                          {dept}
+                        </option>
+                      ))}
+                      <option value="__add_new__" className="font-bold text-teal-700">
+                        + Thêm tổ bộ môn / phòng ban mới...
                       </option>
-                    ))}
-                  </select>
+                    </select>
+                  )}
                 </div>
 
                 <div>

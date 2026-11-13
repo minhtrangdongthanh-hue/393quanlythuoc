@@ -543,3 +543,43 @@ export const INITIAL_STAFF_MEMBERS: SchoolStaff[] = [
     chronicConditions: 'Hay chóng mặt khi làm việc nặng ngoài trời nắng',
   },
 ];
+
+const CUSTOM_DEPARTMENTS_KEY = 'thcs_dongthanh_custom_departments_v1';
+
+export function getCustomDepartments(): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(CUSTOM_DEPARTMENTS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export function addCustomDepartment(name: string): string[] {
+  if (typeof window === 'undefined') return [];
+  const clean = name.trim();
+  if (!clean) return getCustomDepartments();
+  try {
+    const current = getCustomDepartments();
+    if (!current.includes(clean)) {
+      current.push(clean);
+      localStorage.setItem(CUSTOM_DEPARTMENTS_KEY, JSON.stringify(current));
+    }
+    return current;
+  } catch {
+    return [];
+  }
+}
+
+export function getAllDepartments(existingStaffDepts: string[] = []): string[] {
+  const set = new Set<string>([
+    ...STAFF_DEPARTMENTS,
+    ...getCustomDepartments(),
+    ...existingStaffDepts,
+  ]);
+  return Array.from(set).filter(Boolean);
+}
+
